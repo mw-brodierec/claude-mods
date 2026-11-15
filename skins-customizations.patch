@@ -1,0 +1,462 @@
+diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/clawd-scene.ts /Users/marcwilson/Claude/marc-mods/skins/hooks/clawd-scene.ts
+--- a/hooks/clawd-scene.ts	1969-12-31 19:00:00
++++ b/hooks/clawd-scene.ts	2026-10-12 01:16:18
+@@ -0,0 +1,195 @@
++// Clawd for the usage band's right edge, 30px tall like the meters: shooting hoops while
++// Claude works; welding or in the lab (picked per wait) while it waits for you.
++// Pure strings, so a test can check them without the engine.
++
++export const W = 96
++export const H = 30
++const U = 2.5
++const ORANGE = '#D97757'
++const INK = '#1F1E1D'
++const BALL = '#E8833A'
++
++const px = (x: number, y: number, w = 1, h = 1) => `<rect x="${x * U}" y="${y * U}" width="${w * U}" height="${h * U}"/>`
++
++// Body 11x5 units with arm nubs, eyes on top. Legs drawn separately so they can move.
++const body = [px(1, 0, 9, 5), px(0, 2), px(10, 2)].join('')
++const eyes = `<g class="eyes" fill="${INK}">${px(3, 1, 1, 2)}${px(7, 1, 1, 2)}</g>`
++const seams = `<path d="M-3 0H3M0-3V3M-2.1-2.1Q-.9 0-2.1 2.1M2.1-2.1Q.9 0 2.1 2.1" stroke="${INK}" stroke-width=".45" fill="none"/>`
++const ball = `<g class="ball"><g class="spin"><circle r="3" fill="${BALL}"/>${seams}</g></g>`
++
++// Rim 10 wide (ball is 6). Net is a closed mesh: sides, crossing strands and a bottom ring.
++const TOP = [75.5, 78.5, 81.5, 84.5]
++const BOT = [77.5, 79.2, 80.8, 82.5]
++const strands = [
++  `M${TOP[0]} 9.5L${BOT[0]} 16H${BOT[3]}L${TOP[3]} 9.5`,
++  ...TOP.slice(0, 3).map((t, i) => `M${t} 9.5L${BOT[i + 1]} 16M${TOP[i + 1]} 9.5L${BOT[i]} 16`),
++].join('')
++const hoopBack = (poleBottom: number) =>
++  `<rect x="91" y="1" width="2" height="${poleBottom - 1}" fill="#8A8580"/><rect x="87" y="0" width="2.5" height="13" fill="#C9C4BC"/><rect x="84.5" y="8" width="3" height="1" fill="#8A8580"/>`
++// Drawn after the ball, so the ball drops behind the net and the rim's front.
++const hoopFront =
++  `<g class="net" stroke="#E6E1D8" stroke-width=".6" fill="none" stroke-linejoin="round"><path d="${strands}"/></g>` +
++  `<rect x="75" y="8" width="10" height="1.6" rx=".6" fill="#D9482B"/>`
++
++const css = (rules: string[]) => `<style>${rules.join('')}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>`
++const svg = (style: string, inner: string) =>
++  `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${style}${inner}</svg>`
++
++// Standing at x=4 with feet on the floor (body top 12.5 + 7 units = 30); `face` goes over the body.
++const standing = (face: string) =>
++  `<g class="clawd"><g transform="translate(4 12.5)"><g fill="${ORANGE}">${body}${[2, 4, 6, 8].map(x => px(x, 5, 1, 2)).join('')}</g>${face}</g></g>`
++
++export function workingSvg(): string {
++  // One 3.2s loop: three dribbles, gather, jump shot, through the net, ball back to the hand.
++  const style = css([
++    '.ball{animation:ball 3.2s infinite}',
++    '@keyframes ball{',
++    '0%,16%,32%{transform:translate(36px,19px);animation-timing-function:ease-in}',
++    '8%,24%,40%{transform:translate(36px,27px);animation-timing-function:ease-out}',
++    '48%{transform:translate(35px,16px)}',
++    '56%{transform:translate(48px,5px)}62%{transform:translate(60px,2px)}68%{transform:translate(71px,4px)}',
++    '74%{transform:translate(80px,7px);animation-timing-function:ease-in}',
++    '86%{transform:translate(80px,27px);opacity:1}',
++    '90%{transform:translate(80px,27px);opacity:0}',
++    '91%{transform:translate(36px,19px);opacity:0}',
++    '100%{transform:translate(36px,19px);opacity:1}}',
++    // Backspin on the shot: counterclockwise from the release until it drops through the net.
++    '.spin{transform-box:fill-box;transform-origin:50% 50%;animation:spin 3.2s infinite}',
++    '@keyframes spin{0%,48%{transform:rotate(0)}74%{transform:rotate(-540deg)}86%,90.9%{transform:rotate(-630deg)}91%,100%{transform:rotate(0)}}',
++    '.clawd{animation:hop 3.2s infinite}',
++    '@keyframes hop{0%,16%,32%{transform:translateY(0)}8%,24%,40%{transform:translateY(1px)}',
++    '48%{transform:translateY(1.5px)}54%{transform:translateY(-3px)}62%,100%{transform:translateY(0)}}',
++    '.net{transform-box:fill-box;transform-origin:50% 0;animation:swish 3.2s infinite}',
++    '@keyframes swish{0%,75%,90%,100%{transform:scaleY(1)}79%{transform:scaleY(1.3)}84%{transform:scaleY(.92)}}',
++  ])
++  return svg(style, `${hoopBack(H)}${standing(eyes)}${ball}${hoopFront}`)
++}
++
++// Weld point: the torch tip against the plate's left end.
++const TIP = { x: 41, y: 19.5 }
++const SPARKS: [number, number, number][] = [
++  [-6, -5, 6],
++  [4, -6, 8],
++  [-3, -3, 9],
++  [7, -4, 7],
++]
++
++export function weldingSvg(): string {
++  // Welder's mask down, spot-welding a plate at the bench. 2.4s loop: a burst of
++  // arc flashes and sparks, then a pause while the weld glows and cools.
++  const style = css([
++    '.flash{animation:flash 2.4s infinite}',
++    '@keyframes flash{0%,10%,22%,38%,55%{opacity:1}5%,30%{opacity:.4}15%,46%{opacity:.65}56%,100%{opacity:0}}',
++    '.burst{animation:burst 2.4s infinite}',
++    '@keyframes burst{0%,55%{opacity:1}56%,100%{opacity:0}}',
++    ...SPARKS.map(([dx, up, down], i) =>
++      `.s${i}{animation:s${i} .45s ${(i * -0.11).toFixed(2)}s linear infinite}` +
++      `@keyframes s${i}{0%{transform:translate(0,0);opacity:1}50%{transform:translate(${dx / 2}px,${up}px)}100%{transform:translate(${dx}px,${down}px);opacity:0}}`,
++    ),
++    '.weld{animation:cool 2.4s infinite}',
++    '@keyframes cool{0%,55%{fill:#FFD27A}75%{fill:#E8642C}100%{fill:#8E959C}}',
++  ])
++  // Mask over the face: grey shell, dark tinted visor that catches the arc light.
++  const mask =
++    `<rect x="${1.5 * U}" y="${-0.5 * U}" width="${8 * U}" height="${3.6 * U}" rx=".8" fill="#4B5157"/>` +
++    `<rect x="${0.9 * U}" y="${0.6 * U}" width="${0.6 * U}" height="${U}" fill="#33383D"/>` +
++    `<rect x="${2.6 * U}" y="${0.9 * U}" width="${5.8 * U}" height="${1.2 * U}" fill="#1E2A22"/>` +
++    `<g opacity=".55"><rect class="flash" x="${2.6 * U}" y="${0.9 * U}" width="${5.8 * U}" height="${1.2 * U}" fill="#9FE6FF"/></g>`
++  const bench =
++    `<rect x="40" y="21" width="30" height="2" fill="#6E5A48"/><rect x="42" y="23" width="2" height="7" fill="#5A4A3B"/><rect x="66" y="23" width="2" height="7" fill="#5A4A3B"/>` +
++    `<rect x="41" y="18.5" width="20" height="2.5" fill="#8E959C"/><rect class="weld" x="41" y="18.3" width="1.6" height="1.4" fill="#8E959C"/>`
++  // Torch held in the right arm nub, nozzle on the weld point.
++  const torch = `<rect x="31" y="18.6" width="7" height="1.6" fill="#6B6F73"/><rect x="38" y="19.1" width="3" height=".8" fill="#B8BCC0"/>`
++  const arc =
++    `<g transform="translate(${TIP.x} ${TIP.y})">` +
++    `<g class="flash"><circle r="4" fill="#BFE8FF" opacity=".45"/><circle r="1.8" fill="#FFFFFF"/></g>` +
++    `<g class="burst">${SPARKS.map((_, i) => `<circle class="s${i}" r=".7" fill="#FFD27A"/>`).join('')}</g></g>`
++  const parked = `<g transform="translate(80 27)"><circle r="3" fill="${BALL}"/>${seams}</g>`
++
++  return svg(style, `${bench}${parked}${standing(mask)}${torch}${arc}`)
++}
++
++const NEON = '#39FF14'
++const GLASS = 'fill="#DDEFF5" fill-opacity=".18" stroke="#DDEFF5" stroke-width=".5"'
++
++export function labSvg(): string {
++  // White coat and goggles; tips a beaker of neon green into a funnel that feeds a flask,
++  // a coiled condenser and a bubbling flask, beside a rack of glowing test tubes. 3.6s loop.
++  const style = css([
++    '.neon{filter:drop-shadow(0 0 1.2px #39FF14)}',
++    '.beaker{transform-box:fill-box;transform-origin:0% 100%;animation:tilt 3.6s ease-in-out infinite}',
++    '@keyframes tilt{0%,5%,78%,100%{transform:rotate(0)}18%,62%{transform:rotate(32deg)}}',
++    '.liq{transform-box:fill-box;transform-origin:50% 100%;animation:drain 3.6s infinite}',
++    '@keyframes drain{0%,18%{transform:scaleY(1)}62%,80%{transform:scaleY(.35)}96%,100%{transform:scaleY(1)}}',
++    '.stream{animation:stream 3.6s infinite}',
++    '@keyframes stream{0%,19%,62%,100%{opacity:0}21%,60%{opacity:1}}',
++    '.flow{stroke-dasharray:2 3;animation:flow .6s linear infinite}',
++    '@keyframes flow{to{stroke-dashoffset:-5}}',
++    '.bub{animation:bub 1.2s ease-in infinite}.bub.b{animation-delay:-.4s}.bub.c{animation-delay:-.8s}',
++    '@keyframes bub{0%{transform:translateY(0);opacity:0}20%{opacity:1}100%{transform:translateY(-4px);opacity:0}}',
++    '.drip{animation:drip 1.2s ease-in infinite}',
++    '@keyframes drip{0%{transform:translateY(0);opacity:1}80%{transform:translateY(5px);opacity:1}81%,100%{opacity:0}}',
++    '.tube{animation:glow 2.4s ease-in-out infinite}',
++    ...[1, 2, 3, 4].map(i => `.tube.t${i}{animation-delay:-${(i * 0.5).toFixed(1)}s}`),
++    '@keyframes glow{0%,100%{opacity:.75}50%{opacity:1}}',
++    '.eyes{transform-box:fill-box;transform-origin:50% 50%;animation:blink 5s infinite}',
++    '@keyframes blink{0%,94%,100%{transform:scaleY(1)}97%{transform:scaleY(.1)}}',
++  ])
++  // Coat from row 3 down, so it sits below the eyes (rows 1-2); V collar, buttons, pocket and pen.
++  const coat =
++    `<g fill="#F4F2EC">${px(1, 3, 9, 2)}${px(0, 2)}${px(10, 2)}</g>` +
++    `<path d="M${4.6 * U} ${3 * U}H${6.4 * U}L${5.5 * U} ${3.8 * U}Z" fill="${ORANGE}"/>` +
++    `<rect x="${5.4 * U}" y="${3.8 * U}" width="${0.2 * U}" height="${1.2 * U}" fill="#CFCBC2"/>` +
++    `<circle cx="${5.9 * U}" cy="${4.1 * U}" r=".4" fill="#B9B4AA"/><circle cx="${5.9 * U}" cy="${4.65 * U}" r=".4" fill="#B9B4AA"/>` +
++    `<rect x="${2 * U}" y="${3.7 * U}" width="${1.4 * U}" height="${0.8 * U}" fill="none" stroke="#CFCBC2" stroke-width=".4"/>` +
++    `<rect x="${2.5 * U}" y="${3.25 * U}" width="${0.25 * U}" height="${0.6 * U}" fill="#3B7DD8"/>`
++  const goggles =
++    `<rect x="${1 * U}" y="${1.25 * U}" width="${9 * U}" height="${0.5 * U}" fill="#6B7A86"/>` +
++    eyes +
++    `<rect x="${2.4 * U}" y="${0.6 * U}" width="${2.4 * U}" height="${1.8 * U}" rx="1" fill="#CFF4FF" fill-opacity=".45" stroke="#6B7A86" stroke-width=".5"/>` +
++    `<rect x="${6.2 * U}" y="${0.6 * U}" width="${2.4 * U}" height="${1.8 * U}" rx="1" fill="#CFF4FF" fill-opacity=".45" stroke="#6B7A86" stroke-width=".5"/>`
++  // Beaker in the right hand: its bottom-left corner (31.5, 18) is the pivot it tips around.
++  const beaker =
++    `<g class="beaker"><rect x="31.5" y="10" width="6" height="8" rx=".6" ${GLASS}/>` +
++    `<rect class="liq neon" x="32" y="13.5" width="5" height="4.2" fill="${NEON}"/>` +
++    `<path d="M37.5 10.2l.9-.7" stroke="#DDEFF5" stroke-width=".5"/></g>`
++  const stream = `<g class="stream"><path class="flow neon" d="M40.8 14.4Q41.9 15 42 17" stroke="${NEON}" stroke-width=".9" fill="none"/></g>`
++  // Bench, stand and clamp, funnel into a round flask, side arm up into the coil, down into
++  // the conical flask; test-tube rack on the right.
++  const bench = `<rect x="38" y="27" width="56" height="1.5" fill="#6E5A48"/><rect x="40" y="28.5" width="1.5" height="1.5" fill="#5A4A3B"/><rect x="91" y="28.5" width="1.5" height="1.5" fill="#5A4A3B"/>`
++  const stand = `<rect x="47.2" y="7" width=".8" height="20" fill="#8A8580"/><rect x="44.5" y="17.3" width="3" height=".6" fill="#8A8580"/><rect x="46" y="26.4" width="4" height=".6" fill="#8A8580"/>`
++  const funnel = `<path d="M39 16.5H45L42.7 19.5V21.2H41.3V19.5Z" ${GLASS}/>`
++  const flask =
++    `<rect x="41" y="20.5" width="2" height="2" ${GLASS}/><circle cx="42" cy="24.5" r="2.5" ${GLASS}/>` +
++    `<path class="neon" d="M39.7 25.2A2.3 2.3 0 0 0 44.3 25.2Z" fill="${NEON}"/>`
++  const coilPath = 'M43 21.6H49.5V6.5L60 8.2 50 10 60 11.8 50 13.6 60 15.4 62.5 17V19.4'
++  const coil = `<path d="${coilPath}" fill="none" stroke="#CFE9F1" stroke-opacity=".7" stroke-width="1.1" stroke-linejoin="round"/><path class="flow neon" d="${coilPath}" fill="none" stroke="${NEON}" stroke-width=".5"/>`
++  const conical =
++    `<path d="M61.5 19.2H63.5V21.3L66.2 27H58.8L61.5 21.3Z" ${GLASS}/>` +
++    `<path class="neon" d="M60.1 24.2H64.9L66.2 27H58.8Z" fill="${NEON}"/>` +
++    `<circle class="drip neon" cx="62.5" cy="19.6" r=".5" fill="${NEON}"/>` +
++    ['a', 'b', 'c'].map((k, i) => `<circle class="bub ${k}" cx="${61.2 + i * 1.2}" cy="26.3" r=".45" fill="#E9FFE0"/>`).join('')
++  const TUBES: [number, string, number][] = [[71, NEON, 6], [75.5, '#FF4FD8', 4], [80, '#3EE0FF', 7], [84.5, '#FFC44D', 5], [89, NEON, 3.5]]
++  const rack =
++    `<rect x="69.5" y="19.5" width="22" height="1" fill="#8A8580"/>` +
++    TUBES.map(([x, color, fill], i) =>
++      `<rect x="${x}" y="15" width="2.4" height="11" rx="1.2" ${GLASS}/>` +
++      `<rect class="tube t${i} neon" x="${x + 0.3}" y="${25.7 - fill}" width="1.8" height="${fill}" rx=".9" fill="${color}" style="filter:drop-shadow(0 0 1px ${color})"/>`,
++    ).join('') +
++    `<rect x="69.5" y="25.6" width="22" height="1.4" fill="#8A8580"/>`
++
++  return svg(style, `${bench}${stand}${rack}${coil}${conical}${flask}${funnel}${standing(coat + goggles)}${beaker}${stream}`)
++}
++
++const WAITING = [weldingSvg(), labSvg()]
++const WORKING = workingSvg()
++
++// What the band's Svg draws: `wait` picks the waiting scene (0 welding, 1 lab).
++export function clawdScene(isWorking: boolean, wait: number): { source: string; width: number; height: number; alt: string } {
++  return {
++    source: isWorking ? WORKING : (WAITING[wait] ?? WAITING[0] ?? ''),
++    width: W,
++    height: H,
++    alt: isWorking ? 'Clawd dribbling and shooting' : wait === 1 ? 'Clawd in a lab coat pouring a glowing beaker' : 'Clawd welding in a mask',
++  }
++}
+diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/register.tsx /Users/marcwilson/Claude/marc-mods/skins/hooks/register.tsx
+--- a/hooks/register.tsx	2026-10-11 16:27:19
++++ b/hooks/register.tsx	2026-10-12 01:13:30
+@@ -432,8 +432,12 @@
+ 
+ async function refreshUsage($: EngineInterface): Promise<void> {
+   const usage = await $.session.usage()
++  // The engine may report only percent and window; the count follows from those.
++  const tokens = usage.context.tokens || (usage.context.percent != null && usage.context.window ? Math.round((usage.context.percent / 100) * usage.context.window) : 0)
+   const snap: UsageSnap = {
+     context: usage.context.percent ?? null,
++    ...(tokens ? { tokens } : {}),
++    ...(usage.context.window ? { window: usage.context.window } : {}),
+     limits: usage.rateLimits.map(limit => {
+       const resetsAt = limit.resetsAt === undefined ? NaN : Date.parse(limit.resetsAt)
+ 
+@@ -1110,7 +1114,15 @@
+ 
+   // The band above the prompt: context and plan limits. Another mod's drawing there,
+   // and a survey, keep their place.
++  // Clawd's waiting scene (0 welding, 1 lab): re-picked each time a turn ends, from the
++  // clock's milliseconds, which is as random as this needs.
++  let wasWorking = false
++  let waitScene = 0
+   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
++    if (e.props.isWorking !== wasWorking) {
++      wasWorking = e.props.isWorking
++      if (!wasWorking) waitScene = (await $.clock.now()) % 2
++    }
+     const active = await activeSkin($)
+     const usage = await read($, usageAtom)
+     // Drawn from the clock so a countdown switched on shows at once; reading the atom
+@@ -1147,7 +1159,7 @@
+       $,
+       e,
+       <Box flexDirection="column">
+-        {usageBand(look, meters, !e.props.isWorking && !isCompacting, compact)}
++        {usageBand(look, meters, !e.props.isWorking && !isCompacting, compact, { isWorking: e.props.isWorking, wait: waitScene })}
+         {theirs}
+       </Box>,
+     )
+diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/rows.tsx /Users/marcwilson/Claude/marc-mods/skins/hooks/rows.tsx
+--- a/hooks/rows.tsx	2026-10-11 16:27:19
++++ b/hooks/rows.tsx	2026-10-12 01:13:47
+@@ -26,6 +26,7 @@
+ import { tableSvg } from './svg-table'
+ import { terminalSvg } from './svg-terminal'
+ import type { ShellOutput } from './svg-terminal'
++import { clawdScene } from './clawd-scene'
+ import { metersKey, usageLine, usageSvg } from './svg-usage'
+ import { codeRows } from './code-rows'
+ import { languageOf } from './highlight'
+@@ -891,7 +892,8 @@
+ 
+ // The band above the prompt: the meters, and a Compact button that becomes the main
+ // action, with a word on why, once the context is full enough to be worth it.
+-export function usageBand(look: Look, meters: readonly Meter[], canCompact: boolean, compact: () => void) {
++// `clawd`, where given, draws the animated Clawd at the row's right end.
++export function usageBand(look: Look, meters: readonly Meter[], canCompact: boolean, compact: () => void, clawd?: { isWorking: boolean; wait: number }) {
+   const { Box, Text, Button } = look.ui
+   const { palette } = look.skin
+   const context = meters.find(meter => meter.label === 'context')?.percent ?? 0
+@@ -905,18 +907,14 @@
+       {canCompact && isNudge ? <Text color={palette.warn}>{`Context is ${context}% full`}</Text> : ''}
+       {canCompact ? (
+         // A digit hotkey: typed alone into an empty prompt it presses the band's button, which
+-        // is the only way in where the terminal reports no clicks. `plain` shows it: `0: Compact`.
+-        <Button
+-          key="compact"
+-          label={isNudge ? 'Compact now' : 'Compact'}
+-          hotkey={COMPACT_HOTKEY}
+-          plain
+-          {...(isNudge ? { variant: 'primary' as const } : { dimColor: true })}
+-          onPress={compact}
+-        />
++        // is the only way in where the terminal reports no clicks. `plain` shows it: `0: Compact`. The desktop takes clicks, so it gets the red button alone.
++        <Button key="compact" label={isNudge ? 'Compact now' : 'Compact'} {...(look.surface === 'terminal' ? { hotkey: COMPACT_HOTKEY } : {})} plain onPress={compact}>
++          <Text color="#FFFFFF" backgroundColor="#D9482B" bold>{` ${isNudge ? 'Compact now' : 'Compact'} `}</Text>
++        </Button>
+       ) : (
+         ''
+       )}
++      {look.svg === undefined || clawd === undefined ? '' : <look.svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />}
+     </Box>
+   )
+ }
+diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/svg-usage.ts /Users/marcwilson/Claude/marc-mods/skins/hooks/svg-usage.ts
+--- a/hooks/svg-usage.ts	2026-10-11 16:27:19
++++ b/hooks/svg-usage.ts	2026-10-12 01:13:30
+@@ -12,8 +12,12 @@
+ const MINUTE_MS = 60_000
+ 
+ // `resets`, where shown, is the time left until the limit resets, as `countdownOf` writes it.
+-export type Meter = { label: string; percent: number; resets?: string }
++// `text`, where set, is a plain readout with no ring, such as the token count.
++export type Meter = { label: string; percent: number; resets?: string; text?: string }
+ 
++// 142_300 reads as `142k`, 1_000_000 as `1M`, 1_250_000 as `1.3M`.
++export const tokensOf = (n: number): string => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : `${Math.round(n / 1000)}k`)
++
+ // The time left until a reset, to the minute: `3d4h`, `1h05`, `12m`, and `now` once it is due.
+ export function countdownOf(ms: number): string {
+   const minutes = Math.ceil(ms / MINUTE_MS)
+@@ -39,20 +43,20 @@
+ 
+ // What the band's entrance is keyed by: the numbers, not the countdowns, so a countdown
+ // ticking down redraws the rings settled instead of filling them again.
+-export const metersKey = (meters: readonly Meter[]): string => meters.map(meter => `${meter.label} ${meter.percent}%`).join(', ')
++export const metersKey = (meters: readonly Meter[]): string => meters.map(meter => meter.text ?? `${meter.label} ${meter.percent}%`).join(', ')
+ 
+-const meterText = (meter: Meter): string => `${meter.percent}% ${meter.label}${meter.resets === undefined ? '' : ` · ${meter.resets}`}`
++const meterText = (meter: Meter): string => meter.text ?? `${meter.percent}% ${meter.label}${meter.resets === undefined ? '' : ` · ${meter.resets}`}`
+ 
+ // `five_hour` reads as `5h`, `seven_day` as `7d`; any other kind as its own name.
+ export function limitLabel(kind: string): string {
+   const name = kind.toLowerCase()
+ 
+   if (name.includes('five') || name.includes('5h') || name.includes('5_h')) {
+-    return '5h'
++    return 'session'
+   }
+ 
+   if (name.includes('seven') || name.includes('7d') || name.includes('week')) {
+-    return '7d'
++    return 'weekly'
+   }
+ 
+   return name.replace(/_/g, ' ')
+@@ -60,7 +64,10 @@
+ 
+ // `countdowns`, by limit label, puts each limit's time to reset beside its meter.
+ export function metersOf(usage: UsageSnap, countdowns: Record<string, string> = {}): Meter[] {
++  const tokens = usage.tokens === undefined ? '' : `${tokensOf(usage.tokens)}${usage.window === undefined ? '' : ` / ${tokensOf(usage.window)}`} tokens`
++
+   return [
++    ...(tokens === '' ? [] : [{ label: 'tokens', percent: 0, text: tokens }]),
+     ...(usage.context === null ? [] : [{ label: 'context', percent: usage.context }]),
+     ...usage.limits.map(limit => {
+       const resets = countdowns[limit.label]
+@@ -76,7 +83,9 @@
+ 
+ export function usageSvg(meters: readonly Meter[], palette: Palette): { source: string; width: number; height: number; alt: string; entranceMs: number } {
+   // A meter with a countdown is wider than the rest; each starts where the one before ended.
+-  const widths = meters.map(meter => Math.max(ITEM_W, Math.ceil(RING_R * 2 + 12 + measure(meterText(meter), false, TEXT_SIZE) + 20)))
++  const widths = meters.map(meter =>
++    meter.text === undefined ? Math.max(ITEM_W, Math.ceil(RING_R * 2 + 12 + measure(meterText(meter), false, TEXT_SIZE) + 20)) : Math.ceil(measure(meter.text, false, TEXT_SIZE) + 24),
++  )
+   const starts = widths.map((_, i) => widths.slice(0, i).reduce((sum, w) => sum + w, 0))
+   const width = widths.reduce((sum, w) => sum + w, 0)
+   const height = 30
+@@ -84,6 +93,10 @@
+ 
+   const items = meters
+     .map((meter, i) => {
++      if (meter.text !== undefined) {
++        return `<text x="${(starts[i] ?? 0) + 4}" y="19.5" font-size="${TEXT_SIZE}" style="fill:${palette.fg};font-weight:600">${escape(meter.text)}</text>`
++      }
++
+       const x = (starts[i] ?? 0) + RING_R + 4
+       const filled = (circumference * meter.percent) / 100
+       const color = meterColor(meter.percent, palette)
+@@ -107,7 +120,7 @@
+     source: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><style>${style}</style>${items}</svg>`,
+     width,
+     height,
+-    alt: meters.map(meter => `${meter.label} ${meter.percent}%${meter.resets === undefined ? '' : `, resets in ${meter.resets}`}`).join(', '),
++    alt: meters.map(meter => meter.text ?? `${meter.label} ${meter.percent}%${meter.resets === undefined ? '' : `, resets in ${meter.resets}`}`).join(', '),
+     entranceMs: FILL_MS,
+   }
+ }
+@@ -116,7 +129,8 @@
+ export function usageLine(meters: readonly Meter[]): { label: string; bar: string; percent: number; text: string }[] {
+   return meters.map(meter => {
+     const filled = Math.round(meter.percent / 12.5)
++    const bar = meter.text === undefined ? '▰'.repeat(filled) + '▱'.repeat(8 - filled) : ''
+ 
+-    return { label: meter.label, bar: '▰'.repeat(filled) + '▱'.repeat(8 - filled), percent: meter.percent, text: meterText(meter) }
++    return { label: meter.label, bar, percent: meter.percent, text: meterText(meter) }
+   })
+ }
+diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/tests/clawd.test.ts /Users/marcwilson/Claude/marc-mods/skins/tests/clawd.test.ts
+--- a/tests/clawd.test.ts	1969-12-31 19:00:00
++++ b/tests/clawd.test.ts	2026-10-12 01:13:47
+@@ -0,0 +1,14 @@
++import { expect, test } from 'claude-code/testing'
++
++import { clawdScene } from '../hooks/clawd-scene'
++
++test('Clawd shoots hoops while working and welds or runs the lab while waiting', () => {
++  expect(clawdScene(true, 0).source).toContain('@keyframes ball')
++  expect(clawdScene(false, 0).source).toContain('@keyframes flash')
++  expect(clawdScene(false, 1).source).toContain('@keyframes tilt')
++  for (const scene of [clawdScene(true, 1), clawdScene(false, 0), clawdScene(false, 1)]) {
++    expect(scene.height).toBe(30)
++    expect(scene.source.length).toBeLessThan(131072)
++    expect(scene.source).not.toMatch(/<script|\son\w+=/)
++  }
++})
+diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/tests/logic.test.ts /Users/marcwilson/Claude/marc-mods/skins/tests/logic.test.ts
+--- a/tests/logic.test.ts	2026-10-11 16:27:19
++++ b/tests/logic.test.ts	2026-10-12 01:14:44
+@@ -291,8 +291,8 @@
+ })
+ 
+ test('plan limits read as 5h and 7d, and a meter warns as it fills', async () => {
+-  expect(limitLabel('five_hour')).toBe('5h')
+-  expect(limitLabel('seven_day')).toBe('7d')
++  expect(limitLabel('five_hour')).toBe('session')
++  expect(limitLabel('seven_day')).toBe('weekly')
+   expect(metersOf({ context: 42.4, limits: [{ label: '5h', percent: 120 }] })).toEqual([
+     { label: 'context', percent: 42 },
+     { label: '5h', percent: 100 },
+diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/tests/rows.test.tsx /Users/marcwilson/Claude/marc-mods/skins/tests/rows.test.tsx
+--- a/tests/rows.test.tsx	2026-10-11 16:27:19
++++ b/tests/rows.test.tsx	2026-10-12 01:14:44
+@@ -816,8 +816,8 @@
+ 
+   const band = await $.ui.mount(BAND('desktop', false))
+   expect(await band.find({ type: 'Text', text: 'Context is 85% full' })).toBeDefined()
+-  // A digit hotkey reaches it from an empty prompt where the terminal reports no clicks.
+-  expect(((await band.find({ key: 'compact' })) as { props: { hotkey?: string } } | undefined)?.props.hotkey).toBe('0')
++  // The desktop takes clicks, so its red button has no digit hotkey (the terminal keeps one).
++  expect(((await band.find({ key: 'compact' })) as { props: { hotkey?: string } } | undefined)?.props.hotkey).toBeUndefined()
+   await band.press({ key: 'compact' })
+   // It starts on a timer, outside the press, so the press ending cannot cancel it.
+   expect(compacted).toBe(0)
+@@ -1231,11 +1231,11 @@
+ 
+   await runSkin($, 'countdown on')
+   const band = await $.ui.mount(BAND('desktop', false))
+-  expect(await svgSource(band)).toContain('5h · 1h40')
+-  expect(((await band.find({ type: 'Svg' })) as { props: { alt: string } } | undefined)?.props.alt).toContain('5h 18%, resets in 1h40')
++  expect(await svgSource(band)).toContain('session · 1h40')
++  expect(((await band.find({ type: 'Svg' })) as { props: { alt: string } } | undefined)?.props.alt).toContain('session 18%, resets in 1h40')
+ 
+   const line = await $.ui.mount(BAND('terminal', false))
+-  expect(await line.find({ type: 'Text', text: ' 18% 5h · 1h40' })).toBeDefined()
++  expect(await line.find({ type: 'Text', text: ' 18% session · 1h40' })).toBeDefined()
+ })
+ 
+ test('a countdown ticking down redraws the band without filling its rings again', async ($, on) => {
+@@ -1249,7 +1249,7 @@
+ 
+   await clock.advance(60_000)
+   const ticked = await svgSource(band)
+-  expect(ticked).toContain('5h · 1h39')
++  expect(ticked).toContain('session · 1h39')
+   expect(isSettled(ticked), 'the new minute keeps the rings still').toBe(true)
+ })
+ 
+diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/types/index.d.ts /Users/marcwilson/Claude/marc-mods/skins/types/index.d.ts
+--- a/types/index.d.ts	2026-10-11 16:27:19
++++ b/types/index.d.ts	2026-10-11 23:18:19
+@@ -71,7 +71,8 @@
+ 
+ // How full the context window is and how much of each plan limit is spent, in percent,
+ // as the band above the prompt shows them, and when each limit resets (epoch ms) where known.
+-export type UsageSnap = { context: number | null; limits: { label: string; percent: number; resetsAt?: number }[] }
++// `tokens` and `window` are the context's raw counts, where Claude Code reports them.
++export type UsageSnap = { context: number | null; tokens?: number; window?: number; limits: { label: string; percent: number; resetsAt?: number }[] }
+ 
+ // What one turn did, shown in its footer.
+ export type TurnStats = { tools: number; added: number; removed: number }

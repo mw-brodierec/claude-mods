@@ -1,0 +1,24 @@
+{
+  "name": "marc-mods",
+  "description": "Marc's own Claude Code mods, read straight from this folder so upstream updates never overwrite them.",
+  "owner": {
+    "name": "Marc Wilson"
+  },
+  "plugins": [
+    {
+      "name": "skins",
+      "source": "./skins",
+      "description": "hellosverre's skins 0.5.3 with Marc's customizations (see skins-customizations.patch)."
+    },
+    {
+      "name": "savvy-progress",
+      "source": "./savvy-progress",
+      "description": "johnnyvizz's savvy-progress 1.2.0 (claude-kit 272a877) with side-session cost/tokens/time and click-to-open rows."
+    },
+    {
+      "name": "blast-radius",
+      "source": "./blast-radius",
+      "description": "Anthropic's Claude Code DevRel example mod (Apache-2.0, unchanged): holds risky shell commands like rm -rf, git reset --hard and force push, shows what they'd change, with Proceed and Cancel."
+    }
+  ]
+}
