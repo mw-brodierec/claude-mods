@@ -904,7 +904,8 @@ function meterView(look: Look, meters: readonly Meter[], isTight = false) {
 // and every part's own width is measured. The band shows the fullest layout that fits: the nudge
 // goes first, then the long labels, then the 5h and 7d dials (Marc: the animation outranks them),
 // then the context label, leaving the ring with its percent inside, and last the animation.
-// The band hugs what it shows, so the room at its right end matches the gaps between its parts.
+// Marc: the band spans the full width like the build bar below it, and its parts are spread
+// evenly, so the room at each end matches the gaps between them.
 // Anything still too wide is clipped, never spilled.
 export const GLASS_EDGE = '#9a9a9a59'
 export const GLASS_FILL = '#8080800d'
@@ -956,7 +957,7 @@ export function usageBand(look: Look, meters: readonly Meter[], canCompact: bool
     const built = usageSvg(shown, palette, fit.isTight, fit.isMinimal)
     const tier = fit.isMinimal ? 'min:' : fit.onlyContext ? 'ctx:' : fit.isTight ? 'tight:' : ''
     return (
-      <Box key="usage-glass" position="relative" overflow="hidden" alignSelf="flex-start" flexDirection="row" alignItems="center" columnGap={GAP_CELLS} paddingX={GAP_CELLS} borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL}>
+      <Box key="usage-glass" position="relative" overflow="hidden" flexDirection="row" alignItems="center" justifyContent="space-evenly" columnGap={GAP_CELLS} paddingX={0} borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL}>
         <Box key="sheen" position="absolute" top={0} left={0}>
           <Svg source={GLASS_SHEEN} alt="" width={2400} height={40} />
         </Box>
