@@ -287,7 +287,7 @@ export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, str
   tiles.forEach(([k, v, color], i) => {
     const x = I + i * (tw + gap)
     parts.push(
-      glassPanel(x, y, tw, T.tileH, { r: GLASS.tileRadius, tint: color, tintAt: [0.15, 0.2], isQuiet: v === 0 }),
+      glassPanel(x, y, tw, T.tileH, { r: GLASS.tileRadius, tint: color, isQuiet: v === 0 }),
       `<circle cx="${x + 13}" cy="${y + 15}" r="3.5" fill="${color}"/>`,
       txt(x + 21, y + 18.5, T.size.tileKey, fitText(k, T.size.tileKey, tw - 28), 'class="s"'),
       txt(x + 11, y + 40, T.size.tileValue, String(v), 'class="t" font-weight="600" font-variant-numeric="tabular-nums"'),
@@ -360,7 +360,7 @@ export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[]
   const H = Math.ceil(y + T.pad + I)
   const isQuiet = j.status === 'planned' || j.status === 'later' || j.status === 'shipped'
   return {
-    source: svg(W, H, glassPanel(I, I, W - I * 2, H - I * 2, { tint: color, tintAt: [0.06, 0.05], isQuiet }) + parts.join('')),
+    source: svg(W, H, glassPanel(I, I, W - I * 2, H - I * 2, { tint: color, isQuiet }) + parts.join('')),
     height: H,
   }
 }

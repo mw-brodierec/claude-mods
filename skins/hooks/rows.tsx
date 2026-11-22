@@ -895,33 +895,58 @@ function meterView(look: Look, meters: readonly Meter[], isTight = false) {
 // `clawd`, where given, draws the animated Clawd at the row's right end.
 // `isTight` (Marc), for a narrow window: short labels, no countdowns, no nudge text, so the
 // Compact button and Clawd keep their place on the row.
+// Marc: on the desktop the whole band is one glass bar, neutral so it reads on light and dark,
+// with Compact a glass capsule inside it. Under the pointer an edge takes the accent.
+const GLASS_EDGE = '#80808066'
+const GLASS_FILL = '#8080800f'
+const GLASS_FILL_HOVER = '#80808022'
+const GLASS_CAPSULE = '#80808026'
+
 export function usageBand(look: Look, meters: readonly Meter[], canCompact: boolean, compact: () => void, clawd?: { isWorking: boolean; wait: number }, isTight = false) {
   const { Box, Text, Button } = look.ui
   const { palette } = look.skin
   const context = meters.find(meter => meter.label === 'context')?.percent ?? 0
   const isNudge = context >= COMPACT_NUDGE
+  const isGlass = look.surface !== 'terminal' && look.svg !== undefined
+  const label = isNudge ? 'Compact now' : 'Compact'
+
+  const compactButton = !canCompact ? (
+    ''
+  ) : isGlass ? (
+    <Box
+      key="compact-glass"
+      paddingX={1}
+      borderStyle="round"
+      borderColor={isNudge ? palette.warn : GLASS_EDGE}
+      backgroundColor={isNudge ? '#D9482B26' : GLASS_CAPSULE}
+      hover={{ borderColor: isNudge ? palette.warn : palette.user, backgroundColor: isNudge ? '#D9482B40' : GLASS_FILL_HOVER }}
+    >
+      <Button key="compact" label={label} plain onPress={compact}>
+        <Text color={isNudge ? palette.warn : palette.fg} bold>{label}</Text>
+      </Button>
+    </Box>
+  ) : (
+    // A digit hotkey: typed alone into an empty prompt it presses the band's button, which
+    // is the only way in where the terminal reports no clicks. `plain` shows it: `0: Compact`.
+    <Button key="compact" label={label} {...(look.surface === 'terminal' ? { hotkey: COMPACT_HOTKEY } : {})} plain onPress={compact}>
+      <Text color="#FFFFFF" backgroundColor="#D9482B" bold>{` ${label} `}</Text>
+    </Button>
+  )
+
+  const glassProps = isGlass
+    ? { key: 'usage-glass', paddingX: 1, borderStyle: 'round', borderColor: GLASS_EDGE, backgroundColor: GLASS_FILL, marginRight: 5, hover: { borderColor: palette.user, backgroundColor: GLASS_FILL_HOVER } }
+    : { paddingRight: 5 }
 
   return (
     // The right edge stays clear: the band draws its own collapse mark ([-]) there.
-    // Marc: the band wraps rather than clips. The desktop reports the window's width, not the
-    // band's, so no width is computed here: when the meters leave no room, the Compact
-    // button and Clawd move to a second line together, right-aligned, instead of being cut off.
-    <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={2} rowGap={0} paddingRight={5}>
+    // Marc: the dials, Compact and Clawd sit together at the left of one row, and the row wraps
+    // rather than clips. The desktop reports the window's width, not the band's, so no width is
+    // computed here: when they do not fit, Compact and Clawd drop to a second line together.
+    <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={2} rowGap={0} {...glassProps}>
       {meterView(look, meters, isTight)}
-      <Box flexGrow={1} />
-      <Box flexDirection="row" alignItems="center" columnGap={2} flexShrink={0} flexGrow={1} justifyContent="flex-end">
-        {canCompact && isNudge && !isTight ? <Text color={palette.warn}>{`Context is ${context}% full`}</Text> : ''}
-        {canCompact ? (
-          // A digit hotkey: typed alone into an empty prompt it presses the band's button, which
-          // is the only way in where the terminal reports no clicks. `plain` shows it: `0: Compact`. The desktop takes clicks, so it gets the red button alone.
-          <Button key="compact" label={isNudge ? 'Compact now' : 'Compact'} {...(look.surface === 'terminal' ? { hotkey: COMPACT_HOTKEY } : {})} plain onPress={compact}>
-            <Text color="#FFFFFF" backgroundColor="#D9482B" bold>{` ${isNudge ? 'Compact now' : 'Compact'} `}</Text>
-          </Button>
-        ) : (
-          ''
-        )}
-        {look.svg === undefined || clawd === undefined ? '' : <look.svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />}
-      </Box>
+      {canCompact && isNudge && !isTight ? <Text color={palette.warn}>{`Context is ${context}% full`}</Text> : ''}
+      {compactButton}
+      {look.svg === undefined || clawd === undefined ? '' : <look.svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />}
     </Box>
   )
 }

@@ -119,3 +119,25 @@ test('the band shows the build and counts live sessions, not in-flight Agent cal
     await ui.unmount()
   }
 })
+
+test('the desktop pane has a Stacked / Side by side switch, and the band is one glass row', async ($, on) => {
+  harness(on)
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
+
+  const wide = { ...PANE, surface: 'desktop' as const, props: { ...PANE.props, bodyColumns: 140 } }
+  const side = await $.ui.mount(wide)
+  // Wide, it opens side by side: the switch says so and both columns share a wrapping row.
+  expect(await side.find({ type: 'Text', text: /● Side by side/ })).toBeTruthy()
+  expect(await side.find({ type: 'Text', text: /○ Stacked/ })).toBeTruthy()
+  await side.press(await side.find({ type: 'Button', key: 'layout-stacked' }))
+  expect(await side.find({ type: 'Text', text: /● Stacked/ })).toBeTruthy()
+  await side.unmount()
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const glass = await ui.find({ type: 'Box', key: 'savvy-glass' })
+  expect(glass).toBeTruthy()
+  // Coach, crew count and dismiss all live inside the one glass row.
+  expect(await ui.find({ type: 'Button', key: 'savvy-agents' })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', key: 'savvy-dismiss' })).toBeTruthy()
+  await ui.unmount()
+})

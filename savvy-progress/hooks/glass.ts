@@ -1,9 +1,9 @@
 // Glass: the material every savvy-progress drawing sits on (Marc). Frosted, translucent
-// panels with a bright rim, a soft sheen across the top, a blurred tint glowing through
-// from behind and a soft shadow, in the manner of Apple's Liquid Glass.
-//
-// The app draws each SVG as an image, so nothing outside a drawing can show through it.
-// The colour that seems to sit behind the glass is drawn inside, as a blurred orb.
+// panels with a bright rim, a soft sheen across the top and a soft shadow, in the manner
+// of Apple's Liquid Glass. Kept minimal at rest; under the pointer a panel glistens (a
+// sheen sweeps across it) and its edge glows in its own colour. A quiet (grey) panel only
+// shimmers. Hover is CSS inside the drawing, so the Svg must be `isInteractive`, and the
+// glow lights where the pointer enters rather than following it.
 // To restyle, change GLASS and GLASS_CSS; nothing else holds a glass colour or size.
 
 export const GLASS = {
@@ -11,7 +11,7 @@ export const GLASS = {
   tileRadius: 12,
   // Room each drawing leaves around a panel for its shadow.
   inset: 3,
-  orbBlur: 14,
+  glowBlur: 2.2,
   shadowBlur: 3.5,
   shadowY: 1.5,
 }
@@ -22,13 +22,22 @@ export const GLASS_CSS = `<style>
 .gr0{stop-color:#ffffff;stop-opacity:1}.gr1{stop-color:#ffffff;stop-opacity:.15}.gr2{stop-color:#ffffff;stop-opacity:.7}
 .gs0{stop-color:#ffffff;stop-opacity:.55}.gs1{stop-color:#ffffff;stop-opacity:0}
 .gedge{stroke:#000000;stroke-opacity:.07}.gsh{flood-color:#1b1a17;flood-opacity:.10}
-.gorb{opacity:.55}.gorb.q{opacity:.25}
+.gsw0{stop-color:#ffffff;stop-opacity:0}.gsw1{stop-color:#ffffff;stop-opacity:.7}
+.gglow,.gsweep{opacity:0}
+.gglow{transition:opacity .3s ease}
+.gp:hover .gglow{opacity:.95}
+.gsweep{transform-box:fill-box}
+.gp:hover .gsweep{animation:gsw .85s ease-out}
+.gp.q:hover .gsweep{animation:gswq .85s ease-out}
+@keyframes gsw{0%{transform:translateX(-100%);opacity:.85}100%{transform:translateX(350%);opacity:.85}}
+@keyframes gswq{0%{transform:translateX(-100%);opacity:.4}100%{transform:translateX(350%);opacity:.4}}
+@media (prefers-reduced-motion:reduce){.gp:hover .gsweep,.gp.q:hover .gsweep{animation:none}}
 @media (prefers-color-scheme: dark){
 .gf0{stop-color:#ffffff;stop-opacity:.11}.gf1{stop-color:#ffffff;stop-opacity:.045}
 .gr0{stop-color:#ffffff;stop-opacity:.42}.gr1{stop-color:#ffffff;stop-opacity:.04}.gr2{stop-color:#ffffff;stop-opacity:.16}
 .gs0{stop-color:#ffffff;stop-opacity:.10}.gs1{stop-color:#ffffff;stop-opacity:0}
 .gedge{stroke:#000000;stroke-opacity:.35}.gsh{flood-color:#000000;flood-opacity:.45}
-.gorb{opacity:.26}.gorb.q{opacity:.12}}
+.gsw0{stop-opacity:.0}.gsw1{stop-opacity:.22}}
 </style>`
 
 // Gradients and filters one drawing shares between all its panels. `id` keeps drawings apart.
@@ -36,30 +45,33 @@ export const glassDefs = (id = 'g'): string => `<defs>
 <linearGradient id="${id}f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="gf0"/><stop offset="1" class="gf1"/></linearGradient>
 <linearGradient id="${id}r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" class="gr0"/><stop offset=".45" class="gr1"/><stop offset="1" class="gr2"/></linearGradient>
 <linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="gs0"/><stop offset="1" class="gs1"/></linearGradient>
-<filter id="${id}b" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${GLASS.orbBlur}"/></filter>
+<linearGradient id="${id}w" x1="0" y1="0" x2="1" y2="0"><stop offset="0" class="gsw0"/><stop offset=".5" class="gsw1"/><stop offset="1" class="gsw0"/></linearGradient>
+<filter id="${id}b" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="${GLASS.glowBlur}"/></filter>
 <filter id="${id}d" x="-10%" y="-20%" width="120%" height="160%"><feDropShadow dx="0" dy="${GLASS.shadowY}" stdDeviation="${GLASS.shadowBlur}" class="gsh"/></filter>
 </defs>`
 
-type PanelOpts = { r?: number; tint?: string; tintAt?: [number, number]; id?: string; isQuiet?: boolean }
+type PanelOpts = { r?: number; tint?: string; id?: string; isQuiet?: boolean }
 
 // One glass panel at (x, y, w, h): shadow, the tint glowing through, frost, sheen, rim.
-// `tint` is the colour behind it; `tintAt` where it glows from, as fractions of the panel.
+// `tint` is the colour its edge glows in under the pointer; a quiet panel has none, only the shimmer.
 export const glassPanel = (x: number, y: number, w: number, h: number, o: PanelOpts = {}): string => {
   const id = o.id ?? 'g'
   const r = o.r ?? GLASS.radius
   const clip = `${id}c${Math.round(x)}_${Math.round(y)}`
-  const [tx, ty] = o.tintAt ?? [0.12, 0.1]
-  const orbR = Math.max(18, Math.min(w, h) * 0.75)
   const sheenH = Math.min(h * 0.5, 26)
+  const sweepW = Math.max(24, w * 0.4)
+  const glow = o.tint && !o.isQuiet
+    ? `<g class="gglow"><rect x="${x + 0.5}" y="${y + 0.5}" width="${w - 1}" height="${h - 1}" rx="${r - 0.5}" fill="none" stroke="${o.tint}" stroke-width="2.6" filter="url(#${id}b)"/><rect x="${x + 0.5}" y="${y + 0.5}" width="${w - 1}" height="${h - 1}" rx="${r - 0.5}" fill="none" stroke="${o.tint}" stroke-width="1.1"/></g>`
+    : ''
   return [
+    `<g class="gp${o.tint && !o.isQuiet ? '' : ' q'}">`,
     `<clipPath id="${clip}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}"/></clipPath>`,
     `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="url(#${id}f)" filter="url(#${id}d)"/>`,
-    o.tint
-      ? `<g clip-path="url(#${clip})"><circle cx="${x + w * tx}" cy="${y + h * ty}" r="${orbR}" fill="${o.tint}" class="gorb${o.isQuiet ? ' q' : ''}" filter="url(#${id}b)"/><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#${id}f)" opacity=".6"/></g>`
-      : '',
-    `<g clip-path="url(#${clip})"><rect x="${x}" y="${y}" width="${w}" height="${sheenH}" fill="url(#${id}s)"/></g>`,
+    `<g clip-path="url(#${clip})"><rect x="${x}" y="${y}" width="${w}" height="${sheenH}" fill="url(#${id}s)"/><rect class="gsweep" x="${x}" y="${y}" width="${sweepW}" height="${h}" fill="url(#${id}w)"/></g>`,
     `<rect x="${x + 0.5}" y="${y + 0.5}" width="${w - 1}" height="${h - 1}" rx="${r - 0.5}" fill="none" class="gedge"/>`,
     `<rect x="${x + 1}" y="${y + 1}" width="${w - 2}" height="${h - 2}" rx="${r - 1}" fill="none" stroke="url(#${id}r)" stroke-width="1.2"/>`,
+    glow,
+    `</g>`,
   ].join('')
 }
 

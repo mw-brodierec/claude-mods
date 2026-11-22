@@ -238,6 +238,12 @@ const barText = (r: number, width: number): string => {
 const JOB_COLORS = JOB_THEME.status
 // Pane width, CSS px, from which jobs and agents sit side by side; the gap between them.
 const SIDE_BY_SIDE = 640
+
+// Marc: native glass for the band, neutral so it reads on light and dark. Translucent fill and
+// edge; under the pointer the edge takes the bar's colour. The skins band wears the same.
+const GLASS_EDGE = '#80808066'
+const GLASS_FILL = '#8080800f'
+const GLASS_FILL_HOVER = '#80808022'
 const COL_GAP_PX = 16
 
 const buildsDir = async ($: EngineInterface): Promise<string> => `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/builds`
@@ -675,7 +681,7 @@ const headerSvg = (W: number, title: string, t: ReturnType<typeof totals>, isWor
   const y = top + GI
   const tile = (i: number, k: string, v: string) => {
     const x = GI + i * (tw + gap)
-    return `${glassPanel(x, y, tw, 46, { r: GLASS.tileRadius, tint: TILE_TINTS[i], tintAt: [0.12, 0.15] })}
+    return `${glassPanel(x, y, tw, 46, { r: GLASS.tileRadius, tint: TILE_TINTS[i] })}
 <text class="s" x="${x + 11}" y="${y + 17}" font-family="${FONT}" font-size="11">${k}</text>
 <text class="t" x="${x + 11}" y="${y + 36}" font-family="${FONT}" font-size="15" font-weight="600" font-variant-numeric="tabular-nums">${v}</text>`
   }
@@ -726,7 +732,7 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   return svg(
     W,
     AGENT_H,
-    `${glassPanel(GI, GI, W - GI * 2, AGENT_H - GI * 2, { tint: color, tintAt: [0.04, 0.3], isQuiet: a.status !== 'running' })}
+    `${glassPanel(GI, GI, W - GI * 2, AGENT_H - GI * 2, { tint: color, isQuiet: a.status !== 'running' })}
 ${crab(ox, 20, `${costume}#${jerseyOf(a.id)}`, false, a.status === 'running')}
 <text class="t" x="${tx}" y="${GI + 20}" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
 <text x="${tx}" y="${GI + 36}" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tier)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
@@ -748,7 +754,7 @@ const plannedSvg = (W: number, p: Planned): string => {
   return svg(
     W,
     PLANNED_H,
-    `${glassPanel(GI, GI, W - GI * 2, PLANNED_H - GI * 2, { tint: color, tintAt: [0.04, 0.3], isQuiet: true })}
+    `${glassPanel(GI, GI, W - GI * 2, PLANNED_H - GI * 2, { tint: color, isQuiet: true })}
 ${crab(ox, 10, `${tier}#${jerseyOf(p.title)}`, true)}
 <text class="s" x="${tx}" y="${GI + 20}" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(`${p.n}. ${p.title}`, 13, textW))}</text>
 <text x="${tx}" y="${GI + 36}" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier)}</tspan><tspan class="m">  ${xml(meta.filter(Boolean).join('  ·  '))}</tspan></text>
@@ -767,16 +773,24 @@ const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnTy
   const x0 = GI + 12
   const totalsText = `≈${fmtCost(t.cost)} · ${fmtTokens(t.fresh)} ${tr().fresh} · ${fmtTime(t.time)}`
   const fit = Math.max(1, Math.floor((W - x0 - GI - 16 - textWidth(totalsText, 12) - 40) / 36))
-  const shown = icons.slice(0, fit)
-  const more = icons.length - shown.length
-  const body = shown
-    .map((ic, i) => crab(x0 + i * 36, 5, ic.k, ic.dim, ic.s === 'running') + (ic.s === 'running' && ic.k !== 'coach' ? `<circle class="live" cx="${x0 + i * 36 + 32}" cy="9" r="3" fill="${ic.c}"/>` : ''))
-    .join('')
-  const x = x0 + shown.length * 36 + (more ? 4 : 0)
+  // An Svg may not pass 131072 characters; each crab is drawn in full, so stop short of that.
+  const BUDGET = 90_000
+  let used = 0
+  const drawn: string[] = []
+  for (const [i, ic] of icons.slice(0, fit).entries()) {
+    const one = crab(x0 + i * 36, 5, ic.k, ic.dim, ic.s === 'running') + (ic.s === 'running' && ic.k !== 'coach' ? `<circle class="live" cx="${x0 + i * 36 + 32}" cy="9" r="3" fill="${ic.c}"/>` : '')
+    if (used + one.length > BUDGET) break
+    used += one.length
+    drawn.push(one)
+  }
+  const more = icons.length - drawn.length
+  const body = drawn.join('')
+  const shownCount = drawn.length
+  const x = x0 + shownCount * 36 + (more ? 4 : 0)
   return svg(
     W,
     COMPACT_H,
-    `${glassPanel(GI, GI, W - GI * 2, COMPACT_H - GI * 2, { r: (COMPACT_H - GI * 2) / 2, tint: ACCENT, tintAt: [0.05, 0.5], isQuiet: true })}${body}${more ? `<text class="s" x="${x}" y="26" font-family="${FONT}" font-size="12">+${more}</text>` : ''}
+    `${glassPanel(GI, GI, W - GI * 2, COMPACT_H - GI * 2, { r: (COMPACT_H - GI * 2) / 2, tint: ACCENT, isQuiet: true })}${body}${more ? `<text class="s" x="${x}" y="26" font-family="${FONT}" font-size="12">+${more}</text>` : ''}
 <text class="s" x="${W - GI - 16}" y="26" text-anchor="end" font-family="${FONT}" font-size="12" font-variant-numeric="tabular-nums">${totalsText}</text>`,
   )
 }
@@ -1181,7 +1195,7 @@ export const register: Register = (on, options) => {
       const W = Math.max(240, Math.min(1400, (e.props.bodyColumns || 40) * 8 - 8))
       // Marc: with a build, jobs and agents sit side by side once the pane is wide enough;
       // narrower, the row wraps and agents follow below the jobs.
-      const isWide = Boolean(b) && W >= SIDE_BY_SIDE
+      const isWide = Boolean(b) && W >= SIDE_BY_SIDE && !p.isStacked
       const CW = b ? (isWide ? Math.floor((W - COL_GAP_PX) / 2) : W) : W
       const AW = Math.min(CW, 900)
       const section = (key: string, text: string) => (
@@ -1194,32 +1208,32 @@ export const register: Register = (on, options) => {
         return (
           <Box flexDirection="column" gap={1}>
             {b && (
-              <Svg source={buildHeaderSvg(CW, b, { tiles: s.tiles }, coachBadge(running.length > 0)).source} alt={`${b.name}: ${summaryLine(b)}`} width={CW} height={buildHeaderSvg(CW, b, { tiles: s.tiles }, coachBadge(running.length > 0)).height} />
+              <Svg isInteractive source={buildHeaderSvg(CW, b, { tiles: s.tiles }, coachBadge(running.length > 0)).source} alt={`${b.name}: ${summaryLine(b)}`} width={CW} height={buildHeaderSvg(CW, b, { tiles: s.tiles }, coachBadge(running.length > 0)).height} />
             )}
-            <Svg source={compactSvg(AW, list, planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} width={AW} height={COMPACT_H} />
+            <Svg isInteractive source={compactSvg(AW, list, planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} width={AW} height={COMPACT_H} />
             {toggleCompact}
           </Box>
         )
       }
       const agentsColumn = (
         <Box key="agents-col" flexDirection="column">
-          <Svg source={headerSvg(AW, title, t, running.length > 0)} alt={title ? `${title}: ${summary}` : summary} width={AW} height={headerHeight(title)} />
+          <Svg isInteractive source={headerSvg(AW, title, t, running.length > 0)} alt={title ? `${title}: ${summary}` : summary} width={AW} height={headerHeight(title)} />
           {toggleCompact}
           {isEmpty && <Text dimColor>{s.empty}</Text>}
           {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
           {running.flatMap(a => [
-            <Svg key={a.id} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} width={AW} height={AGENT_H} />,
+            <Svg isInteractive key={a.id} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} width={AW} height={AGENT_H} />,
             opener(a),
           ])}
           {finished.length > 0 && toggleDone}
           {!p.isDoneCollapsed &&
             finished.flatMap(a => [
-              <Svg key={a.id} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} width={AW} height={AGENT_H} />,
+              <Svg isInteractive key={a.id} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} width={AW} height={AGENT_H} />,
               opener(a),
             ])}
           {planned.length > 0 && section('h-plan', `${s.planned} · ${planned.length}`)}
           {planned.map(pl => (
-            <Svg key={`plan-${pl.n}`} source={plannedSvg(AW, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={AW} height={PLANNED_H} />
+            <Svg isInteractive key={`plan-${pl.n}`} source={plannedSvg(AW, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={AW} height={PLANNED_H} />
           ))}
         </Box>
       )
@@ -1229,13 +1243,13 @@ export const register: Register = (on, options) => {
       const card = (j: Job) => {
         const drawn = jobCardSvg(CW, b, j, runLines(runsOf(j, list), at), { updated: s.updated, waitingOn: s.waitingOn, more: s.more })
         return [
-          <Svg key={`job-${j.id}`} source={drawn.source} alt={`${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`} width={CW} height={drawn.height} />,
+          <Svg isInteractive key={`job-${j.id}`} source={drawn.source} alt={`${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`} width={CW} height={drawn.height} />,
           prLink(j),
         ]
       }
       const jobsColumn = (
         <Box key="jobs-col" flexDirection="column" gap={1}>
-          <Svg source={header.source} alt={`${b.name}: ${summaryLine(b)}`} width={CW} height={header.height} />
+          <Svg isInteractive source={header.source} alt={`${b.name}: ${summaryLine(b)}`} width={CW} height={header.height} />
           {b.memo && (/^https?:/.test(b.memo) ? <Link key="memo" href={b.memo} label={s.memo} /> : <Text key="memo" dimColor>{b.memo}</Text>)}
           {groups.length === 0 && <Text dimColor>{s.noJobs}</Text>}
           {groups.flatMap(({ g, jobs }) =>
@@ -1245,10 +1259,24 @@ export const register: Register = (on, options) => {
           )}
         </Box>
       )
+      // Marc: a switch at the top right chooses between the two columns and one above the other.
+      const layoutSwitch = (
+        <Box key="layout" flexDirection="row" justifyContent="flex-end" alignItems="center" columnGap={1}>
+          <Button key="layout-stacked" label="Stacked" plain onPress={() => update($, panel, prev => ({ ...prev, isStacked: true }))}>
+            <Text bold={Boolean(p.isStacked)} dimColor={!p.isStacked}>{p.isStacked ? '● Stacked' : '○ Stacked'}</Text>
+          </Button>
+          <Button key="layout-side" label="Side by side" plain onPress={() => update($, panel, prev => ({ ...prev, isStacked: false }))}>
+            <Text bold={!p.isStacked} dimColor={Boolean(p.isStacked)}>{p.isStacked ? '○ Side by side' : '● Side by side'}</Text>
+          </Button>
+        </Box>
+      )
       return (
-        <Box flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={2} alignItems="flex-start">
-          {jobsColumn}
-          {agentsColumn}
+        <Box flexDirection="column" gap={1}>
+          {layoutSwitch}
+          <Box flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={2} alignItems="flex-start">
+            {jobsColumn}
+            {agentsColumn}
+          </Box>
         </Box>
       )
     }
@@ -1417,8 +1445,6 @@ export const register: Register = (on, options) => {
     const s = tr()
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
-    // Progress reaches only apps that draw it; elsewhere a two-Box bar stands in.
-    const Progress = 'Progress' in ui ? ui.Progress : undefined
     const list = await allRuns($)
     const live = liveCount(list)
     const crew = list.length + plannedOf(f, list).length
@@ -1461,33 +1487,42 @@ export const register: Register = (on, options) => {
 
     if ('Svg' in ui) {
       const { Svg } = ui
+      // Marc: one glass bar. The coach and the crew count sit together at the left, the
+      // progress bar takes whatever room is left so the gaps stay even, and the dot and the
+      // title share one line with the bar so they centre on it.
       return (
-        <Box flexDirection="row" alignItems="center" columnGap={2} width="100%">
-          <Text color={bar.color}>●</Text>
-          {Progress ? (
-            // Progress draws its own label and figure: nothing beside it repeats them.
-            <Box flexGrow={1} flexShrink={1} width={0} minWidth={6}>
-              <Progress label={bar.title} value={bar.value} max={bar.max} valueText={`${bar.text} · ${percent}`} color={bar.color} />
+        <Box
+          key="savvy-glass"
+          flexDirection="row"
+          alignItems="center"
+          columnGap={2}
+          marginRight={5}
+          paddingX={1}
+          borderStyle="round"
+          borderColor={GLASS_EDGE}
+          backgroundColor={GLASS_FILL}
+          hover={{ borderColor: bar.color, backgroundColor: GLASS_FILL_HOVER }}
+        >
+          <Box flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
+            <Svg source={bandCrab(isWorking)} alt={isWorking ? s.busy : s.done} width={CRAB_W} height={CRAB_H} />
+            {crewButton}
+          </Box>
+          <Box flexShrink={1} minWidth={0}>
+            <Text wrap="truncate-end">
+              <Text color={bar.color}>● </Text>
+              <Text bold>{bar.title}</Text>
+            </Text>
+          </Box>
+          <Box flexGrow={1} flexShrink={1} width={0} minWidth={6} alignItems="center">
+            <Box width="100%" height={1} backgroundColor="#80808033">
+              <Box width={`${Math.round(bar.ratio * 100)}%`} height={1} backgroundColor={bar.color} />
             </Box>
-          ) : (
-            [
-              <Box key="title" flexShrink={1} minWidth={0}>
-                <Text bold wrap="truncate-end">
-                  {bar.title}
-                </Text>
-              </Box>,
-              <Box key="bar" flexGrow={1} flexShrink={1} width={0} minWidth={6}>
-                <Box width="100%" height={1} backgroundColor="#80808033">
-                  <Box width={`${Math.round(bar.ratio * 100)}%`} height={1} backgroundColor={bar.color} />
-                </Box>
-              </Box>,
-              <Text key="figure" dimColor wrap="truncate-end">
-                {bar.text} · {percent}
-              </Text>,
-            ]
-          )}
-          <Svg source={bandCrab(isWorking)} alt={isWorking ? s.busy : s.done} width={CRAB_W} height={CRAB_H} />
-          {crewButton}
+          </Box>
+          <Box flexShrink={0}>
+            <Text dimColor wrap="truncate-end">
+              {bar.text} · {percent}
+            </Text>
+          </Box>
           {dismiss}
         </Box>
       )
