@@ -120,37 +120,37 @@ test('the band shows the build and counts live sessions, not in-flight Agent cal
   }
 })
 
-test('the desktop pane has a Stacked / Side by side switch, and the band is one glass row', async ($, on) => {
+test('the desktop pane lays out by width with only a Swap button, and the band is one glass row', async ($, on) => {
   harness(on)
   await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
 
   const label = async (ui: { find: (q: object) => Promise<unknown> }, key: string) => ((await ui.find({ type: 'Button', key })) as { props: { label: string } } | undefined)?.props.label
   const wide = { ...PANE, surface: 'desktop' as const, props: { ...PANE.props, bodyColumns: 140 } }
   const side = await $.ui.mount(wide)
-  // Wide, it opens side by side, two equal columns; the switch marks the choice in its labels.
-  expect(await label(side, 'layout-side')).toBe('● Side by side')
+  // Wide, it opens side by side, two equal columns; Swap is the only control.
+  expect(await label(side, 'layout-swap')).toBe('⇄ Swap')
+  expect(await side.find({ type: 'Button', key: 'layout-side' })).toBeUndefined()
+  expect(await side.find({ type: 'Button', key: 'layout-stacked' })).toBeUndefined()
   const cols = (await side.findAll({ type: 'Box' })) as { key?: string; props: { flexGrow?: number; width?: number } }[]
   expect(cols.filter(x => (x.key === 'jobs-col' || x.key === 'agents-col') && x.props.flexGrow === 1 && x.props.width === 0).length).toBe(2)
-  // Drawings carry no size, so the app fits each to its column; a running row is a plain image
-  // (a hoverable frame would reload, and flicker, every time its clock ticks); still ones hover.
+  // Drawings carry no size, so the app fits each to its column, and none is a hoverable frame
+  // (a frame keeps its drawn height when the picture shrinks, leaving uneven gaps).
   const svgs = (await side.findAll({ type: 'Svg' })) as { props: { width?: number; isInteractive?: boolean; alt: string } }[]
   expect(svgs.every(x => x.props.width === undefined)).toBe(true)
-  expect(svgs.find(x => /Watering schedule.*running/.test(x.props.alt))?.props.isInteractive).toBeFalsy()
-  expect(svgs.find(x => /Mobile layout/.test(x.props.alt))?.props.isInteractive).toBe(true)
+  expect(svgs.some(x => x.props.isInteractive)).toBe(false)
   // Swap puts the agents column first.
   const order = async () => ((await side.findAll({ type: 'Box' })) as { key?: string }[]).map(x => x.key).filter(k => k === 'jobs-col' || k === 'agents-col')
   expect(await order()).toEqual(['jobs-col', 'agents-col'])
   await side.press({ key: 'layout-swap' })
   expect(await order()).toEqual(['agents-col', 'jobs-col'])
-  await side.press({ key: 'layout-stacked' })
-  expect(await label(side, 'layout-stacked')).toBe('● Stacked')
   await side.unmount()
 
-  // Too narrow for two legible columns: it stays stacked and says why.
+  // Too narrow for two legible columns: it stacks by itself, with no hint text.
   const narrow = await $.ui.mount({ ...wide, props: { ...wide.props, bodyColumns: 60 } })
-  await narrow.press({ key: 'layout-side' })
-  expect(await label(narrow, 'layout-stacked')).toBe('● Stacked')
-  expect(await narrow.find({ type: 'Text', text: /Widen the pane/ })).toBeTruthy()
+  const ncols = (await narrow.findAll({ type: 'Box' })) as { key?: string; props: { flexGrow?: number } }[]
+  expect(ncols.filter(x => (x.key === 'jobs-col' || x.key === 'agents-col') && x.props.flexGrow === 1).length).toBe(0)
+  expect(await label(narrow, 'layout-swap')).toBe('⇅ Swap')
+  expect(await narrow.find({ type: 'Text', text: /Widen the pane/ })).toBeUndefined()
   await narrow.unmount()
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
