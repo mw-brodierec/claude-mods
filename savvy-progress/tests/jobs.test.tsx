@@ -131,6 +131,12 @@ test('the desktop pane has a Stacked / Side by side switch, and the band is one 
   expect(await label(side, 'layout-side')).toBe('● Side by side')
   const cols = (await side.findAll({ type: 'Box' })) as { key?: string; props: { flexGrow?: number; width?: number } }[]
   expect(cols.filter(x => (x.key === 'jobs-col' || x.key === 'agents-col') && x.props.flexGrow === 1 && x.props.width === 0).length).toBe(2)
+  // Drawings carry no size, so the app fits each to its column; a running row is a plain image
+  // (a hoverable frame would reload, and flicker, every time its clock ticks); still ones hover.
+  const svgs = (await side.findAll({ type: 'Svg' })) as { props: { width?: number; isInteractive?: boolean; alt: string } }[]
+  expect(svgs.every(x => x.props.width === undefined)).toBe(true)
+  expect(svgs.find(x => /Watering schedule.*running/.test(x.props.alt))?.props.isInteractive).toBeFalsy()
+  expect(svgs.find(x => /Mobile layout/.test(x.props.alt))?.props.isInteractive).toBe(true)
   await side.press({ key: 'layout-stacked' })
   expect(await label(side, 'layout-stacked')).toBe('● Stacked')
   await side.unmount()

@@ -239,7 +239,14 @@ const JOB_COLORS = JOB_THEME.status
 // Pane width, CSS px, from which jobs and agents sit side by side; the gap between them.
 // Marc: the narrowest a column may be with its text still easy to read.
 const MIN_COL = 320
-const PANE_CELL_PX = 7.4
+// bodyColumns counts the pane's code-font cells, measured at about 9.3px. Drawings are made at a
+// slightly larger cell and given no size, so the app fits each one to its column: they always fill
+// it (shrunk a few percent at most), never leave a gap at the right or run past the edge.
+const PANE_CELL_PX = 9.6
+// Marc: hover lights a panel only where its drawing holds still. A hoverable drawing sits in a
+// frame that reloads whenever its picture changes, so a running row (its clock ticks) is a plain
+// image; otherwise it flickers.
+const STILL_JOB = new Set(['planned', 'later', 'shipped'])
 
 // Marc: native glass for the band, neutral so it reads on light and dark. Translucent fill and
 // edge and a soft light across the top; no hover effect. The skins band wears the same.
@@ -1202,8 +1209,6 @@ export const register: Register = (on, options) => {
 
     if (e.surface === 'desktop' && 'Svg' in ui) {
       const { Svg } = ui
-      // bodyColumns counts cells of the app's code font, about 8px; taken a little smaller so the
-      // drawings never run past the pane's edge.
       const W = Math.max(240, Math.min(1400, Math.round((e.props.bodyColumns || 40) * PANE_CELL_PX) - 8))
       // Marc: the switch's choice wins, but side by side only where both columns stay legible
       // (MIN_COL each). Narrower, the pane stacks rather than shrink the text past reading.
@@ -1222,32 +1227,32 @@ export const register: Register = (on, options) => {
         return (
           <Box flexDirection="column" gap={1}>
             {b && (
-              <Svg isInteractive source={buildHeaderSvg(CW, b, { tiles: s.tiles }, coachBadge(running.length > 0)).source} alt={`${b.name}: ${summaryLine(b)}`} width={CW} height={buildHeaderSvg(CW, b, { tiles: s.tiles }, coachBadge(running.length > 0)).height} />
+              <Svg source={buildHeaderSvg(CW, b, { tiles: s.tiles }, coachBadge(running.length > 0)).source} alt={`${b.name}: ${summaryLine(b)}`} />
             )}
-            <Svg isInteractive source={compactSvg(AW, list, planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} width={AW} height={COMPACT_H} />
+            <Svg source={compactSvg(AW, list, planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} />
             {toggleCompact}
           </Box>
         )
       }
       const agentsColumn = (
         <Box key="agents-col" flexDirection="column" {...(isWide ? { width: 0, flexGrow: 1, minWidth: 0 } : {})}>
-          <Svg isInteractive source={headerSvg(AW, title, t, running.length > 0)} alt={title ? `${title}: ${summary}` : summary} width={AW} height={headerHeight(title)} />
+          <Svg source={headerSvg(AW, title, t, running.length > 0)} alt={title ? `${title}: ${summary}` : summary} />
           {toggleCompact}
           {isEmpty && <Text dimColor>{s.empty}</Text>}
           {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
           {running.flatMap(a => [
-            <Svg isInteractive key={a.id} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} width={AW} height={AGENT_H} />,
+            <Svg key={a.id} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} />,
             opener(a),
           ])}
           {finished.length > 0 && toggleDone}
           {!p.isDoneCollapsed &&
             finished.flatMap(a => [
-              <Svg isInteractive key={a.id} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} width={AW} height={AGENT_H} />,
+              <Svg isInteractive key={a.id} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} />,
               opener(a),
             ])}
           {planned.length > 0 && section('h-plan', `${s.planned} · ${planned.length}`)}
           {planned.map(pl => (
-            <Svg isInteractive key={`plan-${pl.n}`} source={plannedSvg(AW, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={AW} height={PLANNED_H} />
+            <Svg isInteractive key={`plan-${pl.n}`} source={plannedSvg(AW, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} />
           ))}
         </Box>
       )
@@ -1257,13 +1262,13 @@ export const register: Register = (on, options) => {
       const card = (j: Job) => {
         const drawn = jobCardSvg(CW, b, j, runLines(runsOf(j, list), at), { updated: s.updated, waitingOn: s.waitingOn, more: s.more })
         return [
-          <Svg isInteractive key={`job-${j.id}`} source={drawn.source} alt={`${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`} width={CW} height={drawn.height} />,
+          <Svg isInteractive={STILL_JOB.has(j.status)} key={`job-${j.id}`} source={drawn.source} alt={`${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`} />,
           prLink(j),
         ]
       }
       const jobsColumn = (
         <Box key="jobs-col" flexDirection="column" gap={1} {...(isWide ? { width: 0, flexGrow: 1, minWidth: 0 } : {})}>
-          <Svg isInteractive source={header.source} alt={`${b.name}: ${summaryLine(b)}`} width={CW} height={header.height} />
+          <Svg source={header.source} alt={`${b.name}: ${summaryLine(b)}`} />
           {b.memo && (/^https?:/.test(b.memo) ? <Link key="memo" href={b.memo} label={s.memo} /> : memoButton(b.memo))}
           {groups.length === 0 && <Text dimColor>{s.noJobs}</Text>}
           {groups.flatMap(({ g, jobs }) =>
@@ -1273,19 +1278,19 @@ export const register: Register = (on, options) => {
           )}
         </Box>
       )
-      // Marc: a switch at the top right chooses between the two columns and one above the other.
+      // Marc: a switch at the top left chooses between the two columns and one above the other.
       // The desktop draws a Button's label, so the choice is marked in the label itself.
       const layoutSwitch = (
-        <Box key="layout" flexDirection="row" justifyContent="flex-end" alignItems="center" columnGap={1}>
-          {p.layout === 'side' && !canSide ? <Text key="layout-hint" dimColor>Widen the pane for side by side</Text> : ''}
+        <Box key="layout" flexDirection="row" justifyContent="flex-start" alignItems="center" columnGap={1}>
           <Button key="layout-stacked" label={isSide ? '○ Stacked' : '● Stacked'} plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'stacked' as const }))} />
           <Button key="layout-side" label={isSide ? '● Side by side' : '○ Side by side'} plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'side' as const }))} />
+          {p.layout === 'side' && !canSide ? <Text key="layout-hint" dimColor>Widen the pane for side by side</Text> : ''}
         </Box>
       )
       return (
         <Box flexDirection="column" gap={1}>
           {layoutSwitch}
-          <Box flexDirection={isWide ? 'row' : 'column'} flexWrap="nowrap" columnGap={2} rowGap={2} alignItems="flex-start">
+          <Box flexDirection={isWide ? 'row' : 'column'} flexWrap="nowrap" columnGap={2} rowGap={2} alignItems={isWide ? 'flex-start' : 'stretch'}>
             {jobsColumn}
             {agentsColumn}
           </Box>
