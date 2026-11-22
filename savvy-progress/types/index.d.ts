@@ -76,6 +76,8 @@ export type Panel = {
   isShippedCollapsed?: boolean
   // Marc: the switch's choice of jobs beside agents or above them; absent, the pane's width decides.
   layout?: 'stacked' | 'side'
+  // Marc: the agents before the build's jobs (on top, or on the left).
+  isAgentsFirst?: boolean
 }
 
 export type JobStatus = 'running' | 'waiting' | 'planned' | 'later' | 'shipped'

@@ -137,6 +137,11 @@ test('the desktop pane has a Stacked / Side by side switch, and the band is one 
   expect(svgs.every(x => x.props.width === undefined)).toBe(true)
   expect(svgs.find(x => /Watering schedule.*running/.test(x.props.alt))?.props.isInteractive).toBeFalsy()
   expect(svgs.find(x => /Mobile layout/.test(x.props.alt))?.props.isInteractive).toBe(true)
+  // Swap puts the agents column first.
+  const order = async () => ((await side.findAll({ type: 'Box' })) as { key?: string }[]).map(x => x.key).filter(k => k === 'jobs-col' || k === 'agents-col')
+  expect(await order()).toEqual(['jobs-col', 'agents-col'])
+  await side.press({ key: 'layout-swap' })
+  expect(await order()).toEqual(['agents-col', 'jobs-col'])
   await side.press({ key: 'layout-stacked' })
   expect(await label(side, 'layout-stacked')).toBe('● Stacked')
   await side.unmount()

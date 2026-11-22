@@ -1284,6 +1284,7 @@ export const register: Register = (on, options) => {
         <Box key="layout" flexDirection="row" justifyContent="flex-start" alignItems="center" columnGap={1}>
           <Button key="layout-stacked" label={isSide ? '○ Stacked' : '● Stacked'} plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'stacked' as const }))} />
           <Button key="layout-side" label={isSide ? '● Side by side' : '○ Side by side'} plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'side' as const }))} />
+          <Button key="layout-swap" label={isSide ? '⇄ Swap' : '⇅ Swap'} plain onPress={() => update($, panel, prev => ({ ...prev, isAgentsFirst: !prev.isAgentsFirst }))} />
           {p.layout === 'side' && !canSide ? <Text key="layout-hint" dimColor>Widen the pane for side by side</Text> : ''}
         </Box>
       )
@@ -1291,8 +1292,9 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column" gap={1}>
           {layoutSwitch}
           <Box flexDirection={isWide ? 'row' : 'column'} flexWrap="nowrap" columnGap={2} rowGap={2} alignItems={isWide ? 'flex-start' : 'stretch'}>
-            {jobsColumn}
-            {agentsColumn}
+            {/* Marc: Swap puts the agents first, on top when stacked, on the left side by side. */}
+            {p.isAgentsFirst ? agentsColumn : jobsColumn}
+            {p.isAgentsFirst ? jobsColumn : agentsColumn}
           </Box>
         </Box>
       )
