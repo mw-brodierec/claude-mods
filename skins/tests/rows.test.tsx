@@ -102,8 +102,9 @@ async function startDesktop($: Engine, on: On) {
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
 }
 
-const svgSource = async (ui: { find: (q: { type: string }) => Promise<unknown> }) =>
-  ((await ui.find({ type: 'Svg' })) as { props: { source: string } } | undefined)?.props.source ?? ''
+// The band's first drawing with something to say: the glass sheen under it has an empty alt.
+const svgSource = async (ui: { findAll: (q: { type: string }) => Promise<unknown[]> }) =>
+  ((await ui.findAll({ type: 'Svg' })) as { props: { source: string; alt: string } }[]).find(x => x.props.alt !== '')?.props.source ?? ''
 
 const isSettled = (source: string) => source.includes('animation:none!important')
 
@@ -1232,7 +1233,7 @@ test('with countdown on, the band says when each limit resets, on both surfaces'
   await runSkin($, 'countdown on')
   const band = await $.ui.mount(BAND('desktop', false))
   expect(await svgSource(band)).toContain('session · 1h40')
-  expect(((await band.find({ type: 'Svg' })) as { props: { alt: string } } | undefined)?.props.alt).toContain('session 18%, resets in 1h40')
+  expect(((await band.findAll({ type: 'Svg' })) as { props: { alt: string } }[]).map(x => x.props.alt).join(' ')).toContain('session 18%, resets in 1h40')
 
   const line = await $.ui.mount(BAND('terminal', false))
   expect(await line.find({ type: 'Text', text: ' 18% session · 1h40' })).toBeDefined()
@@ -2000,7 +2001,7 @@ test('/skin calm off puts back the settings it changed, and keeps changes made m
   expect(JSON.stringify(listed)).toContain('calm off')
 })
 
-test('a narrow desktop window keeps the band to rings, short labels and the Compact button', async ($, on) => {
+test('the desktop band keeps whatever fits its width: Clawd and long labels first to go, the context ring last', async ($, on) => {
   mock.clock(on, { now: 10_000 })
   on('session.cwd', () => ({ value: '/work' }))
   on('store.get', () => ({ value: undefined }))
@@ -2010,12 +2011,29 @@ test('a narrow desktop window keeps the band to rings, short labels and the Comp
   on('command.register', () => ({ value: { command: 'skin' } }))
   on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
-  const band = await $.ui.mount(BAND('desktop', false, 120))
-  // No nudge text and no token count when tight; the Compact button stays.
-  expect(await band.find({ type: 'Text', text: 'Context is 85% full' })).toBeUndefined()
-  expect(await band.find({ key: 'compact' })).toBeDefined()
-  const svg = (await band.findAll({ type: 'Svg' })).map(x => String((x.props as { source?: string }).source)).join('')
-  expect(svg).toContain('ctx')
-  expect(svg).not.toContain('tokens')
-  await band.unmount()
+  const drawn = async (columns: number) => {
+    const band = await $.ui.mount(BAND('desktop', false, columns))
+    const svgs = ((await band.findAll({ type: 'Svg' })) as { props: { source: string; alt: string } }[]).filter(x => x.props.alt !== '')
+    const out = { svgs: svgs.map(x => x.props.source), alts: svgs.map(x => x.props.alt), compact: await band.find({ key: 'compact' }), nudge: await band.find({ type: 'Text', text: 'Context is 85% full' }) }
+    await band.unmount()
+    return out
+  }
+  // A wide window (about 1500px): long labels, the nudge, Compact and Clawd.
+  const wide = await drawn(200)
+  expect(wide.svgs[0]).toContain('context')
+  expect(wide.nudge).toBeDefined()
+  expect(wide.alts.some(a => a.startsWith('Clawd'))).toBe(true)
+  // Your 715px window, about 89 cells: everything still fits, Clawd included.
+  const yours = await drawn(89)
+  expect(yours.compact).toBeDefined()
+  expect(yours.alts.length).toBe(2)
+  // A phone-narrow band: short labels, then Clawd goes.
+  const narrow = await drawn(45)
+  expect(narrow.svgs[0]).toContain('ctx')
+  expect(narrow.compact).toBeDefined()
+  // The narrowest: the context ring alone, its percent inside, and a smaller Compact.
+  const tiny = await drawn(20)
+  expect(tiny.svgs.length).toBe(1)
+  expect(tiny.svgs[0]).toContain('>85<')
+  expect(tiny.compact).toBeDefined()
 })

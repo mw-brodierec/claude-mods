@@ -129,9 +129,18 @@ test('the desktop pane has a Stacked / Side by side switch, and the band is one 
   // Wide, it opens side by side: the switch says so and both columns share a wrapping row.
   expect(await side.find({ type: 'Text', text: /● Side by side/ })).toBeTruthy()
   expect(await side.find({ type: 'Text', text: /○ Stacked/ })).toBeTruthy()
-  await side.press(await side.find({ type: 'Button', key: 'layout-stacked' }))
+  await side.press({ key: 'layout-stacked' })
   expect(await side.find({ type: 'Text', text: /● Stacked/ })).toBeTruthy()
   await side.unmount()
+
+  // A narrow pane opens stacked; choosing Side by side really puts the columns side by side.
+  const narrow = await $.ui.mount({ ...wide, props: { ...wide.props, bodyColumns: 60 } })
+  expect(await narrow.find({ type: 'Text', text: /● Stacked/ })).toBeTruthy()
+  await narrow.press({ key: 'layout-side' })
+  expect(await narrow.find({ type: 'Text', text: /● Side by side/ })).toBeTruthy()
+  const rows = (await narrow.findAll({ type: 'Box' })) as { props: { flexDirection?: string } }[]
+  expect(rows.some(x => x.props.flexDirection === 'row')).toBe(true)
+  await narrow.unmount()
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const glass = await ui.find({ type: 'Box', key: 'savvy-glass' })
@@ -139,5 +148,13 @@ test('the desktop pane has a Stacked / Side by side switch, and the band is one 
   // Coach, crew count and dismiss all live inside the one glass row.
   expect(await ui.find({ type: 'Button', key: 'savvy-agents' })).toBeTruthy()
   expect(await ui.find({ type: 'Button', key: 'savvy-dismiss' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /Jobs 1\/5/ })).toBeTruthy()
   await ui.unmount()
+
+  // About 300px: the figures go first, then the coach; the count, title and bar stay.
+  const slim = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 40 } })
+  expect(await slim.find({ type: 'Text', text: /Jobs 1\/5/ })).toBeUndefined()
+  expect(await slim.find({ type: 'Button', key: 'savvy-agents' })).toBeTruthy()
+  expect(await slim.find({ type: 'Text', text: 'Garden planner' })).toBeTruthy()
+  await slim.unmount()
 })

@@ -84,8 +84,23 @@ export const meterColor = (percent: number, palette: Palette): string =>
 const SHORT: Record<string, string> = { context: 'ctx', session: '5h', weekly: '7d' }
 
 // `isTight` (a narrow window) keeps the rings and percents, shortens the labels and drops the countdowns.
-export function usageSvg(meters: readonly Meter[], palette: Palette, isTight = false): { source: string; width: number; height: number; alt: string; entranceMs: number } {
+export function usageSvg(meters: readonly Meter[], palette: Palette, isTight = false, isMinimal = false): { source: string; width: number; height: number; alt: string; entranceMs: number } {
   const alt = meters.map(meter => meter.text ?? `${meter.label} ${meter.percent}%${meter.resets === undefined ? '' : `, resets in ${meter.resets}`}`).join(', ')
+  // Marc: the narrowest band keeps only the context ring, its percent inside it.
+  if (isMinimal) {
+    const m = meters.find(x => x.label === 'context') ?? meters[0]
+    const r = 12
+    const c = 2 * Math.PI * r
+    const pct = m?.percent ?? 0
+    const filled = (c * pct) / 100
+    return {
+      source: `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30"><style>text{font-family:${FONT}}.fill{animation:fill ${FILL_MS}ms cubic-bezier(.2,.8,.2,1)}@keyframes fill{from{stroke-dasharray:0 100}}@media (prefers-reduced-motion:reduce){.fill{animation:none}}</style><circle cx="15" cy="15" r="${r}" fill="none" stroke="${palette.muted}" stroke-opacity=".25" stroke-width="3"/><circle class="fill" cx="15" cy="15" r="${r}" fill="none" stroke="${meterColor(pct, palette)}" stroke-width="3" stroke-linecap="round" stroke-dasharray="${filled} ${c}" transform="rotate(-90 15 15)" style="--len:${filled}"/><text x="15" y="18.4" text-anchor="middle" font-size="9" style="fill:${palette.fg};font-weight:700">${pct}</text></svg>`,
+      width: 30,
+      height: 30,
+      alt,
+      entranceMs: FILL_MS,
+    }
+  }
   if (isTight) meters = meters.map(meter => ({ label: SHORT[meter.label] ?? meter.label, percent: meter.percent, ...(meter.text === undefined ? {} : { text: meter.text }) }))
   // A meter with a countdown is wider than the rest; each starts where the one before ended.
   const widths = meters.map(meter =>

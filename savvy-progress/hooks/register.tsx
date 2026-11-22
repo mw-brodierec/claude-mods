@@ -240,10 +240,14 @@ const JOB_COLORS = JOB_THEME.status
 const SIDE_BY_SIDE = 640
 
 // Marc: native glass for the band, neutral so it reads on light and dark. Translucent fill and
-// edge; under the pointer the edge takes the bar's colour. The skins band wears the same.
-const GLASS_EDGE = '#80808066'
-const GLASS_FILL = '#8080800f'
-const GLASS_FILL_HOVER = '#80808022'
+// edge and a soft light across the top; no hover effect. The skins band wears the same.
+const GLASS_EDGE = '#9a9a9a59'
+const GLASS_FILL = '#8080800d'
+// The light across the top, as on the Agents panels: a wide drawing pinned under the band's
+// parts and clipped by its corners. The skins band draws the same one.
+const GLASS_SHEEN = `<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="40" viewBox="0 0 2400 40"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".14"/><stop offset=".6" stop-color="#fff" stop-opacity=".03"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="r" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".35" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity=".28"/></linearGradient></defs><rect width="2400" height="40" fill="url(#s)"/><rect width="2400" height="1" fill="url(#r)"/></svg>`
+// The band's bodyColumns counts cells of the app's code font, about 8px; taken a little smaller to stay safe.
+const BAND_CELL_PX = 7.4
 const COL_GAP_PX = 16
 
 const buildsDir = async ($: EngineInterface): Promise<string> => `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/builds`
@@ -1195,8 +1199,11 @@ export const register: Register = (on, options) => {
       const W = Math.max(240, Math.min(1400, (e.props.bodyColumns || 40) * 8 - 8))
       // Marc: with a build, jobs and agents sit side by side once the pane is wide enough;
       // narrower, the row wraps and agents follow below the jobs.
-      const isWide = Boolean(b) && W >= SIDE_BY_SIDE && !p.isStacked
-      const CW = b ? (isWide ? Math.floor((W - COL_GAP_PX) / 2) : W) : W
+      // Marc: the switch's choice wins. With none made, the pane's width decides. The default could
+      // already be stacked, which is why choosing it earlier seemed to do nothing.
+      const isSide = p.layout ? p.layout === 'side' : W >= SIDE_BY_SIDE
+      const isWide = Boolean(b) && isSide
+      const CW = b ? (isWide ? Math.max(240, Math.floor((W - COL_GAP_PX) / 2)) : W) : W
       const AW = Math.min(CW, 900)
       const section = (key: string, text: string) => (
         <Text key={key} dimColor>
@@ -1262,18 +1269,18 @@ export const register: Register = (on, options) => {
       // Marc: a switch at the top right chooses between the two columns and one above the other.
       const layoutSwitch = (
         <Box key="layout" flexDirection="row" justifyContent="flex-end" alignItems="center" columnGap={1}>
-          <Button key="layout-stacked" label="Stacked" plain onPress={() => update($, panel, prev => ({ ...prev, isStacked: true }))}>
-            <Text bold={Boolean(p.isStacked)} dimColor={!p.isStacked}>{p.isStacked ? '● Stacked' : '○ Stacked'}</Text>
+          <Button key="layout-stacked" label="Stacked" plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'stacked' as const }))}>
+            <Text bold={!isSide} dimColor={isSide}>{isSide ? '○ Stacked' : '● Stacked'}</Text>
           </Button>
-          <Button key="layout-side" label="Side by side" plain onPress={() => update($, panel, prev => ({ ...prev, isStacked: false }))}>
-            <Text bold={!p.isStacked} dimColor={Boolean(p.isStacked)}>{p.isStacked ? '○ Side by side' : '● Side by side'}</Text>
+          <Button key="layout-side" label="Side by side" plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'side' as const }))}>
+            <Text bold={isSide} dimColor={!isSide}>{isSide ? '● Side by side' : '○ Side by side'}</Text>
           </Button>
         </Box>
       )
       return (
         <Box flexDirection="column" gap={1}>
           {layoutSwitch}
-          <Box flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={2} alignItems="flex-start">
+          <Box flexDirection={isWide ? 'row' : 'column'} flexWrap="nowrap" columnGap={2} rowGap={2} alignItems="flex-start">
             {jobsColumn}
             {agentsColumn}
           </Box>
@@ -1490,21 +1497,23 @@ export const register: Register = (on, options) => {
       // Marc: one glass bar. The coach and the crew count sit together at the left, the
       // progress bar takes whatever room is left so the gaps stay even, and the dot and the
       // title share one line with the bar so they centre on it.
+      // Which parts show is measured, not guessed: the full bar when it fits, then without the
+      // figures, then without the coach; the title truncates and the bar keeps at least 60px.
+      const room = (e.props.bodyColumns || 200) * BAND_CELL_PX - 20
+      const gap = 16
+      const crewW = textWidth(`🔍 ×${crew}`, 14) + 8
+      const titleW = textWidth(`● ${bar.title}`, 14) + 4
+      const figureW = textWidth(`${bar.text} · ${percent}`, 14) + 4
+      const need = (parts: number[]) => parts.reduce((sum, w) => sum + w, 0) + gap * (parts.length - 1)
+      const hasFigure = need([CRAB_W + 8 + crewW, titleW, 60, figureW, 20]) <= room
+      const hasCoach = hasFigure || need([CRAB_W + 8 + crewW, Math.min(titleW, 80), 60, 20]) <= room
       return (
-        <Box
-          key="savvy-glass"
-          flexDirection="row"
-          alignItems="center"
-          columnGap={2}
-          marginRight={5}
-          paddingX={1}
-          borderStyle="round"
-          borderColor={GLASS_EDGE}
-          backgroundColor={GLASS_FILL}
-          hover={{ borderColor: bar.color, backgroundColor: GLASS_FILL_HOVER }}
-        >
+        <Box key="savvy-glass" position="relative" overflow="hidden" flexDirection="row" alignItems="center" columnGap={2} paddingX={1} borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL}>
+          <Box key="sheen" position="absolute" top={0} left={0}>
+            <Svg source={GLASS_SHEEN} alt="" width={2400} height={40} />
+          </Box>
           <Box flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
-            <Svg source={bandCrab(isWorking)} alt={isWorking ? s.busy : s.done} width={CRAB_W} height={CRAB_H} />
+            {hasCoach ? <Svg source={bandCrab(isWorking)} alt={isWorking ? s.busy : s.done} width={CRAB_W} height={CRAB_H} /> : ''}
             {crewButton}
           </Box>
           <Box flexShrink={1} minWidth={0}>
@@ -1518,11 +1527,15 @@ export const register: Register = (on, options) => {
               <Box width={`${Math.round(bar.ratio * 100)}%`} height={1} backgroundColor={bar.color} />
             </Box>
           </Box>
-          <Box flexShrink={0}>
-            <Text dimColor wrap="truncate-end">
-              {bar.text} · {percent}
-            </Text>
-          </Box>
+          {hasFigure ? (
+            <Box flexShrink={1} minWidth={0}>
+              <Text dimColor wrap="truncate-end">
+                {bar.text} · {percent}
+              </Text>
+            </Box>
+          ) : (
+            ''
+          )}
           {dismiss}
         </Box>
       )

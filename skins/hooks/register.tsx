@@ -1162,7 +1162,7 @@ reply width: ${lastColumns} columns`
       $,
       e,
       <Box flexDirection="column">
-        {usageBand(look, meters, !e.props.isWorking && !isCompacting, compact, { isWorking: e.props.isWorking, wait: waitScene }, look.svg !== undefined && (e.props.bodyColumns || 200) < TIGHT_COLUMNS)}
+        {usageBand(look, meters, !e.props.isWorking && !isCompacting, compact, { isWorking: e.props.isWorking, wait: waitScene }, look.svg !== undefined && (e.props.bodyColumns || 200) < TIGHT_COLUMNS, e.props.bodyColumns || 200)}
         {theirs}
       </Box>,
     )
