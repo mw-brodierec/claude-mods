@@ -17,8 +17,6 @@ import { commandSegments } from './command-output'
 import { pickWait } from './clawd-scene'
 // Marc: below this many reported columns (the desktop reports the window's width) the usage band goes tight.
 const TIGHT_COLUMNS = 170
-// Marc: narrower than this, only the context ring (its percent inside) and a small Compact.
-const MINIMAL_COLUMNS = 90
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
@@ -1164,7 +1162,7 @@ reply width: ${lastColumns} columns`
       $,
       e,
       <Box flexDirection="column">
-        {usageBand(look, meters, !e.props.isWorking && !isCompacting, compact, { isWorking: e.props.isWorking, wait: waitScene }, look.svg !== undefined && (e.props.bodyColumns || 200) < TIGHT_COLUMNS, look.svg !== undefined && (e.props.bodyColumns || 200) < MINIMAL_COLUMNS)}
+        {usageBand(look, meters, !e.props.isWorking && !isCompacting, compact, { isWorking: e.props.isWorking, wait: waitScene }, look.svg !== undefined && (e.props.bodyColumns || 200) < TIGHT_COLUMNS)}
         {theirs}
       </Box>,
     )

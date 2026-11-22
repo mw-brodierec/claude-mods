@@ -2018,14 +2018,4 @@ test('a narrow desktop window keeps the band to rings, short labels and the Comp
   expect(svg).toContain('ctx')
   expect(svg).not.toContain('tokens')
   await band.unmount()
-
-  // Narrowest: only the context ring with its percent inside, a small Compact, no Clawd.
-  const tiny = await $.ui.mount(BAND('desktop', false, 60))
-  expect(await tiny.find({ key: 'compact' })).toBeDefined()
-  const rings = await tiny.findAll({ type: 'Svg' })
-  expect(rings.length).toBe(1)
-  const only = String((rings[0]?.props as { source?: string }).source)
-  expect(only).toContain('>85<')
-  expect(only).not.toContain('5h')
-  await tiny.unmount()
 })

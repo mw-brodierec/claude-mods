@@ -867,15 +867,15 @@ export const COMPACT_NUDGE = 70
 
 export const COMPACT_HOTKEY = '0'
 
-function meterView(look: Look, meters: readonly Meter[], isTight = false, isMinimal = false) {
+function meterView(look: Look, meters: readonly Meter[], isTight = false) {
   const { Box, Text } = look.ui
   const { palette } = look.skin
 
   if (look.svg !== undefined) {
     const Svg = look.svg
-    const built = usageSvg(meters, palette, isTight, isMinimal)
+    const built = usageSvg(meters, palette, isTight)
 
-    return <Svg source={sourceOf(look, `usage:${isMinimal ? 'min:' : isTight ? 'tight:' : ''}${metersKey(meters)}`, built)} alt={built.alt} width={built.width} height={built.height} />
+    return <Svg source={sourceOf(look, `usage:${isTight ? 'tight:' : ''}${metersKey(meters)}`, built)} alt={built.alt} width={built.width} height={built.height} />
   }
 
   return (
@@ -897,12 +897,12 @@ function meterView(look: Look, meters: readonly Meter[], isTight = false, isMini
 // Compact button and Clawd keep their place on the row.
 // Marc: on the desktop the whole band is one glass bar, neutral so it reads on light and dark,
 // with Compact a glass capsule inside it. Under the pointer an edge takes the accent.
-const GLASS_EDGE = '#b4b4b480'
-const GLASS_FILL = '#ffffff12'
-const GLASS_SHEEN = '#ffffff2e'
-const GLASS_CAPSULE = '#ffffff1c'
+const GLASS_EDGE = '#80808066'
+const GLASS_FILL = '#8080800f'
+const GLASS_FILL_HOVER = '#80808022'
+const GLASS_CAPSULE = '#80808026'
 
-export function usageBand(look: Look, meters: readonly Meter[], canCompact: boolean, compact: () => void, clawd?: { isWorking: boolean; wait: number }, isTight = false, isMinimal = false) {
+export function usageBand(look: Look, meters: readonly Meter[], canCompact: boolean, compact: () => void, clawd?: { isWorking: boolean; wait: number }, isTight = false) {
   const { Box, Text, Button } = look.ui
   const { palette } = look.skin
   const context = meters.find(meter => meter.label === 'context')?.percent ?? 0
@@ -913,9 +913,16 @@ export function usageBand(look: Look, meters: readonly Meter[], canCompact: bool
   const compactButton = !canCompact ? (
     ''
   ) : isGlass ? (
-    <Box key="compact-glass" borderStyle="round" borderColor={isNudge ? palette.warn : GLASS_EDGE} backgroundColor={isNudge ? '#D9482B26' : GLASS_CAPSULE}>
+    <Box
+      key="compact-glass"
+      paddingX={1}
+      borderStyle="round"
+      borderColor={isNudge ? palette.warn : GLASS_EDGE}
+      backgroundColor={isNudge ? '#D9482B26' : GLASS_CAPSULE}
+      hover={{ borderColor: isNudge ? palette.warn : palette.user, backgroundColor: isNudge ? '#D9482B40' : GLASS_FILL_HOVER }}
+    >
       <Button key="compact" label={label} plain onPress={compact}>
-        <Text color={isNudge ? palette.warn : palette.fg} bold>{` ${label} `}</Text>
+        <Text color={isNudge ? palette.warn : palette.fg} bold>{label}</Text>
       </Button>
     </Box>
   ) : (
@@ -927,7 +934,7 @@ export function usageBand(look: Look, meters: readonly Meter[], canCompact: bool
   )
 
   const glassProps = isGlass
-    ? { key: 'usage-glass', paddingX: 1, borderStyle: 'round', borderColor: GLASS_EDGE, backgroundColor: GLASS_FILL, overflow: 'hidden' as const }
+    ? { key: 'usage-glass', paddingX: 1, borderStyle: 'round', borderColor: GLASS_EDGE, backgroundColor: GLASS_FILL, marginRight: 5, hover: { borderColor: palette.user, backgroundColor: GLASS_FILL_HOVER } }
     : { paddingRight: 5 }
 
   return (
@@ -936,11 +943,10 @@ export function usageBand(look: Look, meters: readonly Meter[], canCompact: bool
     // rather than clips. The desktop reports the window's width, not the band's, so no width is
     // computed here: when they do not fit, Compact and Clawd drop to a second line together.
     <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={2} rowGap={0} {...glassProps}>
-      {isGlass ? <Box key="sheen" position="absolute" top={0} left={0} right={0} height={1} backgroundColor={GLASS_SHEEN} /> : ''}
-      {meterView(look, meters, isTight || isMinimal, isMinimal)}
-      {canCompact && isNudge && !isTight && !isMinimal ? <Text color={palette.warn}>{`Context is ${context}% full`}</Text> : ''}
+      {meterView(look, meters, isTight)}
+      {canCompact && isNudge && !isTight ? <Text color={palette.warn}>{`Context is ${context}% full`}</Text> : ''}
       {compactButton}
-      {look.svg === undefined || clawd === undefined || isMinimal ? '' : <look.svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />}
+      {look.svg === undefined || clawd === undefined ? '' : <look.svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />}
     </Box>
   )
 }

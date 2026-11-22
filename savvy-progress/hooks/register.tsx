@@ -240,10 +240,10 @@ const JOB_COLORS = JOB_THEME.status
 const SIDE_BY_SIDE = 640
 
 // Marc: native glass for the band, neutral so it reads on light and dark. Translucent fill and
-// edge and a sheen along the top, no hover effect. The skins band wears the same.
-const GLASS_EDGE = '#b4b4b480'
-const GLASS_FILL = '#ffffff12'
-const GLASS_SHEEN = '#ffffff2e'
+// edge; under the pointer the edge takes the bar's colour. The skins band wears the same.
+const GLASS_EDGE = '#80808066'
+const GLASS_FILL = '#8080800f'
+const GLASS_FILL_HOVER = '#80808022'
 const COL_GAP_PX = 16
 
 const buildsDir = async ($: EngineInterface): Promise<string> => `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/builds`
@@ -1195,10 +1195,8 @@ export const register: Register = (on, options) => {
       const W = Math.max(240, Math.min(1400, (e.props.bodyColumns || 40) * 8 - 8))
       // Marc: with a build, jobs and agents sit side by side once the pane is wide enough;
       // narrower, the row wraps and agents follow below the jobs.
-      // A choice made with the switch wins; with none, the pane's width decides.
-      const isSide = p.layout ? p.layout === 'side' : W >= SIDE_BY_SIDE
-      const isWide = Boolean(b) && isSide
-      const CW = b ? (isWide ? Math.max(p.layout === 'side' ? 280 : 0, Math.floor((W - COL_GAP_PX) / 2)) : W) : W
+      const isWide = Boolean(b) && W >= SIDE_BY_SIDE && !p.isStacked
+      const CW = b ? (isWide ? Math.floor((W - COL_GAP_PX) / 2) : W) : W
       const AW = Math.min(CW, 900)
       const section = (key: string, text: string) => (
         <Text key={key} dimColor>
@@ -1264,18 +1262,18 @@ export const register: Register = (on, options) => {
       // Marc: a switch at the top right chooses between the two columns and one above the other.
       const layoutSwitch = (
         <Box key="layout" flexDirection="row" justifyContent="flex-end" alignItems="center" columnGap={1}>
-          <Button key="layout-stacked" label="Stacked" plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'stacked' as const }))}>
-            <Text bold={!isSide} dimColor={isSide}>{!isSide ? '● Stacked' : '○ Stacked'}</Text>
+          <Button key="layout-stacked" label="Stacked" plain onPress={() => update($, panel, prev => ({ ...prev, isStacked: true }))}>
+            <Text bold={Boolean(p.isStacked)} dimColor={!p.isStacked}>{p.isStacked ? '● Stacked' : '○ Stacked'}</Text>
           </Button>
-          <Button key="layout-side" label="Side by side" plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'side' as const }))}>
-            <Text bold={isSide} dimColor={!isSide}>{isSide ? '● Side by side' : '○ Side by side'}</Text>
+          <Button key="layout-side" label="Side by side" plain onPress={() => update($, panel, prev => ({ ...prev, isStacked: false }))}>
+            <Text bold={!p.isStacked} dimColor={Boolean(p.isStacked)}>{p.isStacked ? '○ Side by side' : '● Side by side'}</Text>
           </Button>
         </Box>
       )
       return (
         <Box flexDirection="column" gap={1}>
           {layoutSwitch}
-          <Box flexDirection={isSide ? 'row' : 'column'} flexWrap={p.layout === 'side' ? 'nowrap' : isSide ? 'wrap' : 'nowrap'} columnGap={2} rowGap={2} alignItems="flex-start">
+          <Box flexDirection="row" flexWrap="wrap" columnGap={2} rowGap={2} alignItems="flex-start">
             {jobsColumn}
             {agentsColumn}
           </Box>
@@ -1489,8 +1487,6 @@ export const register: Register = (on, options) => {
 
     if ('Svg' in ui) {
       const { Svg } = ui
-      // Narrow window: drop the coach, the title and the figures; keep the count and the bar.
-      const isNarrow = (e.props.bodyColumns || 200) < 90
       // Marc: one glass bar. The coach and the crew count sit together at the left, the
       // progress bar takes whatever room is left so the gaps stay even, and the dot and the
       // title share one line with the bar so they centre on it.
@@ -1500,41 +1496,33 @@ export const register: Register = (on, options) => {
           flexDirection="row"
           alignItems="center"
           columnGap={2}
+          marginRight={5}
           paddingX={1}
-          overflow="hidden"
           borderStyle="round"
           borderColor={GLASS_EDGE}
           backgroundColor={GLASS_FILL}
+          hover={{ borderColor: bar.color, backgroundColor: GLASS_FILL_HOVER }}
         >
-          <Box key="sheen" position="absolute" top={0} left={0} right={0} height={1} backgroundColor={GLASS_SHEEN} />
           <Box flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
-            {isNarrow ? '' : <Svg source={bandCrab(isWorking)} alt={isWorking ? s.busy : s.done} width={CRAB_W} height={CRAB_H} />}
+            <Svg source={bandCrab(isWorking)} alt={isWorking ? s.busy : s.done} width={CRAB_W} height={CRAB_H} />
             {crewButton}
           </Box>
-          {isNarrow ? (
-            ''
-          ) : (
-            <Box flexShrink={1} minWidth={0}>
-              <Text wrap="truncate-end">
-                <Text color={bar.color}>● </Text>
-                <Text bold>{bar.title}</Text>
-              </Text>
-            </Box>
-          )}
-          <Box flexGrow={1} flexShrink={1} width={0} minWidth={4} alignItems="center">
+          <Box flexShrink={1} minWidth={0}>
+            <Text wrap="truncate-end">
+              <Text color={bar.color}>● </Text>
+              <Text bold>{bar.title}</Text>
+            </Text>
+          </Box>
+          <Box flexGrow={1} flexShrink={1} width={0} minWidth={6} alignItems="center">
             <Box width="100%" height={1} backgroundColor="#80808033">
               <Box width={`${Math.round(bar.ratio * 100)}%`} height={1} backgroundColor={bar.color} />
             </Box>
           </Box>
-          {isNarrow ? (
-            ''
-          ) : (
-            <Box flexShrink={0}>
-              <Text dimColor wrap="truncate-end">
-                {bar.text} · {percent}
-              </Text>
-            </Box>
-          )}
+          <Box flexShrink={0}>
+            <Text dimColor wrap="truncate-end">
+              {bar.text} · {percent}
+            </Text>
+          </Box>
           {dismiss}
         </Box>
       )
