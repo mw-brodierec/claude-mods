@@ -519,22 +519,17 @@ const CRAB_CSS = `<style>
 .run g{transform-box:fill-box}
 @keyframes st{50%{transform:translateY(-1px)}}@keyframes bob{50%{transform:translateY(1px)}}
 /* Marc: every player dribbles while working; the fable star floats, the light runs at double pace,
-   the coach taps the clipboard and his whistle glints. */
+   the coach paces side to side and his whistle glints. */
 .run .ball{animation:dribble .5s ease-in infinite}
 @keyframes dribble{50%{transform:translateY(5px)}}
 .c-fable.run{animation:float 1s ease-in-out infinite}
 .c-fable.run .la,.c-fable.run .lb,.c-fable.run .bd{animation:none}
 @keyframes float{50%{transform:translateY(-2px)}}
 .c-light.run .la{animation-duration:.25s}.c-light.run .lb{animation-duration:.25s;animation-delay:-.125s}.c-light.run .ball{animation-duration:.25s}
-.c-coach.run .arm{animation:tap 1s steps(1) infinite}@keyframes tap{50%{transform:translateY(2px)}}
+.c-coach.run{animation:pace 2s ease-in-out infinite}@keyframes pace{0%,100%{transform:translateX(-2px)}50%{transform:translateX(2px)}}
 .c-coach.run .gl{animation:blink 1s steps(1) infinite}@keyframes blink{50%{opacity:.15}}
 @media (prefers-reduced-motion: reduce){.run,.run g{animation:none!important}}
 </style>`
-
-// The Brodie "B", 3x5, for the coach's polo and cap.
-const GLYPHS: Record<string, string[]> = {
-  B: ['xx.', 'x.x', 'xx.', 'x.x', 'xx.'],
-}
 
 const BALL_ORANGE = '#E8833A'
 const BALL_SEAM = '#8A3B12'
@@ -615,18 +610,19 @@ const drawCostume = (costume: string, f: Fill): void => {
   if (kit) player(f, kit, ROLE_LOOKS[role])
 }
 
-// The orchestrator: the coach. Black cap with the red brim, charcoal polo with a red collar
-// and the "B", a whistle on its lanyard, the clipboard of plays raised; taps it while the team works.
+// The orchestrator: the coach. Black hair, a plain white collared shirt with grey buttons, a black whistle on a fine grey necklace, blue trousers. He paces while the team works.
 COSTUMES.coach = f => {
-  crabBody(f, -4, 'arm')
-  stamp(f, 7, 5, ['....kkkkkkkk....', '..kkkkkkkkkkkk..', '..kkkkkkkkkkkk..', 'rrrrrrrrrrrrrrrr'], { k: '#1C1C1E', r: BRODIE_RED })
-  stamp(f, 13, 6, GLYPHS.B?.slice(0, 2) ?? [], { x: '#FFFFFF' })
-  stamp(f, 7, 14, ['ppppprr..rrppppp', 'pppppprwwrpppppp', 'ppppppppwppppppp', 'pppppppppppppppp', 'pppppppppppppppp', 'pppppppppppppppp', 'pppppppppppppppp', 'pppppppppppppppp'], { p: '#2A2D33', r: BRODIE_RED, w: '#FFFFFF' })
-  stamp(f, 17, 17, GLYPHS.B ?? [], { x: BRODIE_RED })
-  f(11, 15, 1, 1, '#F4F3EE'); f(12, 16, 1, 1, '#F4F3EE'); f(13, 17, 1, 1, '#F4F3EE')
-  f(13, 18, 3, 1, '#C9CCD2'); f(13, 18, 1, 1, '#FFFFFF', 'gl')
-  f(23, 4, 5, 7, '#8B5A2B', 'arm'); f(24, 4, 3, 1, '#C9CCD2', 'arm'); f(24, 5, 3, 5, '#FAFAF8', 'arm')
-  f(24, 6, 1, 1, BRODIE_RED, 'arm'); f(26, 8, 1, 1, '#1F1E1D', 'arm'); f(25, 7, 1, 1, '#1F1E1D', 'arm')
+  crabBody(f)
+  const BLUE = '#2F5BA8'
+  // Hair: a black crop on top of his head.
+  f(7, 9, 16, 2, '#1F1E1D'); f(8, 8, 5, 1, '#1F1E1D'); f(14, 8, 6, 1, '#1F1E1D'); f(21, 10, 2, 1, '#1F1E1D')
+  stamp(f, 7, 14, ['eWWWWcc..ccWWWWe', 'eWWWWWc..cWWWWWe', 'eWWWWWWbWWWWWWWe', 'eWWWWWWWWWWWWWWe', 'eWWWWWWbWWWWWWWe', 'eWWWWWWWWWWWWWWe', 'eWWWWWWbWWWWWWWe', 'pppppppppppppppp'], { W: '#F8F8F6', c: '#D6D6D2', b: '#9AA0A8', e: '#C9CCD2', p: BLUE })
+  // Blue trouser legs over his legs, moving with them.
+  f(7, 22, 2, 3, BLUE, 'la'); f(17, 22, 2, 3, BLUE, 'la'); f(11, 22, 2, 3, BLUE, 'lb'); f(21, 22, 2, 3, BLUE, 'lb')
+  // The fine grey necklace from the collar down to the black whistle on his chest.
+  f(12, 15, 1, 1, '#9AA0A8'); f(12, 16, 1, 1, '#9AA0A8'); f(16, 15, 1, 1, '#9AA0A8'); f(16, 16, 1, 1, '#9AA0A8'); f(13, 17, 1, 1, '#9AA0A8'); f(15, 17, 1, 1, '#9AA0A8')
+  f(13, 18, 3, 1, '#1F1E1D'); f(12, 18, 1, 1, '#1F1E1D'); f(15, 19, 1, 1, '#1F1E1D')
+  f(14, 18, 1, 1, '#6A6A70', 'gl')
 }
 
 // Who plays what: the savvy tiers by tier; other agents by their role.
@@ -1448,7 +1444,8 @@ export const register: Register = (on, options) => {
     if (!bar) return next(e)
     const percent = `${Math.round(bar.ratio * 100)}%`
 
-    const crewButton = <Button key="savvy-agents" label={`×${crew}`} plain onPress={() => void togglePane($)} />
+    // Marc: the magnifier says the count opens the agents panel.
+    const crewButton = <Button key="savvy-agents" label={`🔍 ×${crew}`} plain onPress={() => void togglePane($)} />
     const dismiss = (
       <Button
         key="savvy-dismiss"

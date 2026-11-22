@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clawdScene, WAIT_COUNT } from '../hooks/clawd-scene'
+import { clawdScene, pickWait, WAIT_COUNT } from '../hooks/clawd-scene'
 
 test('Clawd shoots hoops while working and welds or runs the lab while waiting', () => {
   expect(clawdScene(true, 0).source).toContain('@keyframes ball')
@@ -27,4 +27,12 @@ test('every waiting scene is its own animated drawing, the same size as the band
     sources.add(scene.source)
   }
   expect(sources.size).toBe(WAIT_COUNT)
+})
+
+test('a light theme never picks the dark-only burglar scene', () => {
+  const burglar = Array.from({ length: WAIT_COUNT }, (_, i) => i).find(i => clawdScene(false, i).alt.includes('burglar')) ?? -1
+  expect(burglar).toBeGreaterThan(-1)
+  const picked = new Set(Array.from({ length: 500 }, (_, seed) => pickWait(seed, true)))
+  expect(picked.has(burglar)).toBe(false)
+  expect(new Set(Array.from({ length: 500 }, (_, seed) => pickWait(seed, false))).has(burglar)).toBe(true)
 })

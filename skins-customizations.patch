@@ -1,7 +1,7 @@
 diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/clawd-scene.ts /Users/marcwilson/Claude/marc-mods/skins/hooks/clawd-scene.ts
 --- a/hooks/clawd-scene.ts	1969-12-31 19:00:00
-+++ b/hooks/clawd-scene.ts	2026-11-22 15:55:50
-@@ -0,0 +1,727 @@
++++ b/hooks/clawd-scene.ts	2026-11-22 16:06:31
+@@ -0,0 +1,769 @@
 +// Clawd for the usage band's right edge, 30px tall like the meters: shooting hoops while
 +// Claude works; welding or in the lab (picked per wait) while it waits for you.
 +// Pure strings, so a test can check them without the engine.
@@ -480,22 +480,57 @@ diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/clawd-scene.
 +  return svg(style, `${stars}${moon(12, 7, 5)}${ufo}${earth}${orbiter}${canadarm}${walker}`)
 +}
 +
-+export function detectiveSvg(): string {
-+  // Deerstalker on, following a trail of footprints with the magnifying glass.
++export function burglarSvg(): string {
++  // Night in an alley, the whole drawing (so it reads the same on any theme, and the band only
++  // picks it on a dark one): a burglar in black sweeps his flashlight along the alley. The beam
++  // turns with the torch in his claw; when it lands at the far end it shows a caped figure with
++  // pointed ears, and a dark thought bubble with a red "!" pops over his head. 4.2s loop.
 +  const style = css([
 +    blinkEyes,
-+    '.glass{animation:sweep 3.2s ease-in-out infinite}@keyframes sweep{0%,100%{transform:translateX(0)}50%{transform:translateX(26px)}}',
-+    ...[0, 1, 2, 3, 4].map(i => `.p${i}{animation:print 3.2s infinite;animation-delay:${(i * 0.3).toFixed(1)}s}`),
-+    '@keyframes print{0%,10%{opacity:.15}20%,60%{opacity:.9}80%,100%{opacity:.15}}',
++    '.sweep{transform-box:view-box;transform-origin:31.5px 19px;animation:sweep 4.2s ease-in-out infinite}',
++    '@keyframes sweep{0%{transform:rotate(-13deg)}22%{transform:rotate(12deg)}42%{transform:rotate(-9deg)}56%,84%{transform:rotate(-2.3deg)}100%{transform:rotate(-13deg)}}',
++    '.gasp{opacity:0;animation:gasp 4.2s steps(1) infinite}@keyframes gasp{0%,59%{opacity:0}60%,84%{opacity:1}85%,100%{opacity:0}}',
++    '.flicker{animation:flicker 2.1s steps(1) infinite}@keyframes flicker{0%,100%{opacity:1}48%{opacity:.75}50%{opacity:1}}',
++    '.lamp{animation:lamp 3.3s steps(1) infinite}@keyframes lamp{0%,100%{opacity:.9}62%{opacity:.35}66%{opacity:.9}}',
 +  ])
++  // All in black: beanie, a full mask with eyeholes, top, trousers. A faint edge keeps him off the wall.
++  const EDGE = 'stroke="#55565C" stroke-width=".35"'
 +  const look =
-+    `<rect x="${0.5 * U}" y="${-1.7 * U}" width="${10 * U}" height="${1.9 * U}" rx="2.5" fill="#7A4A26"/>` +
-+    pf('#A0703F', px(1.5, -1.3, 0.6, 0.6), px(3.5, -0.8, 0.6, 0.6), px(5.5, -1.3, 0.6, 0.6), px(7.5, -0.8, 0.6, 0.6)) +
-+    pf('#5A3519', px(-0.3, -0.1, 11.6, 0.4), px(0.2, 0.2, 1, 1.6), px(9.8, 0.2, 1, 1.6)) +
-+    eyes + pf('#B08A5B', px(1, 3, 9, 2)) + pf('#8C6A42', px(5, 3, 0.4, 2))
-+  const prints = [44, 52, 60, 68, 76].map((x, i) => `<g class="p${i}" fill="#5A4A3B"><ellipse cx="${x}" cy="${28 - (i % 2)}" rx="1.4" ry=".7"/><ellipse cx="${x + 2.4}" cy="${28 - (i % 2)}" rx=".5" ry=".4"/></g>`).join('')
-+  const glass = `<g class="glass"><path d="M31 19L38 23" stroke="#7A4A26" stroke-width="1.3"/><circle cx="41" cy="24.5" r="3.3" fill="#A9D6F5" fill-opacity=".35" stroke="#3A3A3C" stroke-width="1"/><path d="M39.6 23.2q.8-.9 2-.8" stroke="#FFFFFF" stroke-width=".5" fill="none"/></g>`
-+  return svg(style, `${floor()}${prints}${standing(look)}${glass}`)
++    `<g fill="#17181B" ${EDGE}>${px(1, 2.6, 9, 2.4)}${px(0, 2)}${px(10, 2)}${px(2, 5, 1, 2)}${px(4, 5, 1, 2)}${px(6, 5, 1, 2)}${px(8, 5, 1, 2)}</g>` +
++    `<path d="M${1 * U} 0Q${1 * U} ${-2.4 * U} ${5.5 * U} ${-2.4 * U}Q${10 * U} ${-2.4 * U} ${10 * U} 0Z" fill="#17181B" ${EDGE}/>` +
++    pf('#2A2B30', px(1, -0.4, 9, 0.5)) +
++    `<rect x="${0.4 * U}" y="${-0.1 * U}" width="${10.2 * U}" height="${2.8 * U}" rx="1" fill="#17181B" ${EDGE}/>` +
++    `<g class="eyes" fill="#FFFFFF">${px(3, 1, 1, 1)}${px(7, 1, 1, 1)}</g>`
++  // The alley, edge to edge: brick back wall, a wall lamp flickering over him, the side walls
++  // closing in toward the far end, wet cobbles underfoot, a bin and a fire escape.
++  const alley =
++    `<rect x="0" y="0" width="96" height="30" fill="#1C1E24"/>` +
++    `<g stroke="#262931" stroke-width=".5">${[3, 7, 11, 15, 19, 23].map(y => `<path d="M0 ${y}H96"/>`).join('')}${[0, 1, 2, 3, 4, 5].map(r => Array.from({ length: 12 }, (_, c) => `<path d="M${2 + c * 8 + (r % 2) * 4} ${3 + r * 4}v4"/>`).join('')).join('')}</g>` +
++    `<radialGradient id="lampGlow" cx="50%" cy="0%" r="100%"><stop offset="0" stop-color="#FFD98A" stop-opacity=".22"/><stop offset="1" stop-color="#FFD98A" stop-opacity="0"/></radialGradient>` +
++    `<path class="lamp" d="M10 1.6L-2 27H26Z" fill="url(#lampGlow)"/><rect x="8" y="0" width="4" height="1.2" fill="#3A3D44"/><rect x="8.6" y="1.2" width="2.8" height=".8" fill="#FFE7A8" class="lamp"/>` +
++    `<path d="M96 0L84 5V24.5L96 30Z" fill="#121419"/><path d="M84 5L72 9V23L84 24.5Z" fill="#0F1115" opacity=".7"/>` +
++    `<rect x="0" y="26" width="96" height="4" fill="#121418"/>` +
++    `<g fill="#1A1D23">${[2, 9, 16, 44, 51, 58, 65].map(x => `<rect x="${x}" y="26.8" width="5" height="1" rx=".4"/>`).join('')}</g>` +
++    `<ellipse cx="60" cy="28.4" rx="6" ry=".7" fill="#2A3140" opacity=".8"/>` +
++    `<rect x="48" y="20.5" width="8" height="5.5" fill="#2E4A3A"/><rect x="47.5" y="19.9" width="9" height="1" fill="#24392D"/>` +
++    `<g stroke="#2E3138" stroke-width=".5" fill="none"><path d="M62 4H70V11H62ZM62 7.5H70"/><path d="M64 11L68 4"/><path d="M62 11V18H70V11"/></g>`
++  // The caped figure at the far end: cowl with pointed ears, broad shoulders, cape to the ground.
++  // Near the wall's own colour, so the beam behind him is what shows his shape.
++  const figure =
++    `<path d="M78.6 9.6L79.3 7.4 79.8 9.2H81.2L81.7 7.4 82.4 9.6Q83.2 11.2 82.2 12.6L85.6 14 88 26H73L75.4 14 78.8 12.6Q77.8 11.2 78.6 9.6Z" fill="#17191E"/>` +
++    `<path class="gasp" d="M79.6 10.6h.8M80.6 10.6h.8" stroke="#E8EEF5" stroke-width=".35"/>`
++  // Torch and beam turn together about his claw: the beam can never leave the torch.
++  const beam =
++    `<linearGradient id="beam" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFF4C2" stop-opacity=".85"/><stop offset=".6" stop-color="#FFE68A" stop-opacity=".45"/><stop offset="1" stop-color="#FFE68A" stop-opacity=".12"/></linearGradient>` +
++    `<g class="sweep"><path class="flicker" d="M38.6 17.7L100 9V29L38.6 20.1Z" fill="url(#beam)"/>` +
++    `<rect x="30.4" y="17.6" width="6.6" height="2.6" rx=".6" fill="#3A3D44"/><rect x="36.6" y="17" width="2.2" height="3.8" rx=".5" fill="#5A5F66"/><rect x="38.6" y="17.4" width=".5" height="3" fill="#FFF4C2"/>` +
++    `<rect x="30" y="17.4" width="2.4" height="3" fill="${ORANGE}"/></g>`
++  // The thought bubble: dark, with a red "!", trailing two small puffs down to his head.
++  const gasp =
++    `<g class="gasp"><circle cx="30.5" cy="10.6" r=".8" fill="#2A2D35" stroke="#4A4E58" stroke-width=".35"/><circle cx="33" cy="8.4" r="1.2" fill="#2A2D35" stroke="#4A4E58" stroke-width=".35"/>` +
++    `<rect x="34.2" y=".6" width="8.4" height="7" rx="3.5" fill="#2A2D35" stroke="#4A4E58" stroke-width=".4"/>` +
++    `<rect x="37.75" y="1.7" width="1.3" height="3.2" rx=".5" fill="#E5484D"/><rect x="37.75" y="5.4" width="1.3" height="1.2" rx=".5" fill="#E5484D"/></g>`
++  return svg(style, `${alley}${beam}${figure}${standing(look)}${gasp}`)
 +}
 +
 +export function engineerSvg(): string {
@@ -697,7 +732,8 @@ diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/clawd-scene.
 +  return svg(style, `${floor()}${board}${marks}${standing(look)}${marker}`)
 +}
 +
-+const SCENES: [string, string][] = [
++// [drawing, what it shows, dark themes only].
++const SCENES: [string, string, boolean?][] = [
 +  [weldingSvg(), 'Clawd welding in a mask'],
 +  [labSvg(), 'Clawd in a lab coat pouring a glowing beaker'],
 +  [generalSvg(), 'Clawd in navy dress whites saluting the American and Canadian flags'],
@@ -706,7 +742,7 @@ diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/clawd-scene.
 +  [architectSvg(), 'Clawd drawing a house onto a blueprint floor plan'],
 +  [astronautSvg(), 'Clawd at the window of a stainless rocket ship bound for Mars'],
 +  [shuttleSvg(), 'Clawd on a spacewalk by the Canadarm fixing the shuttle wing above the Earth, the Moon beyond'],
-+  [detectiveSvg(), 'Clawd following footprints with a magnifying glass'],
++  [burglarSvg(), 'Clawd as a burglar in black, his flashlight finding a caped figure down a dark alley', true],
 +  [engineerSvg(), 'Clawd turning a valve on a steam pipe'],
 +  [chefSvg(), 'Clawd flipping an omelette at the stove'],
 +  [racerSvg(), 'Clawd racing a Formula One car past the kerbs and the checkered flag'],
@@ -719,9 +755,15 @@ diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/clawd-scene.
 +// How many waiting scenes there are, so the band can pick one per wait.
 +export const WAIT_COUNT = SCENES.length
 +
++// Marc: a scene picked from `seed`, never a dark-only one while the theme is light.
++export function pickWait(seed: number, isLight: boolean): number {
++  const allowed = SCENES.map((scene, i) => (isLight && scene[2] ? -1 : i)).filter(i => i >= 0)
++  return allowed[Math.abs(Math.floor(seed)) % allowed.length] ?? 0
++}
++
 +// What the band's Svg draws: `wait` picks the waiting scene (0 welding, 1 lab, then Marc's trades).
 +export function clawdScene(isWorking: boolean, wait: number): { source: string; width: number; height: number; alt: string } {
-+  const [source, alt] = SCENES[wait] ?? SCENES[0] ?? ['', '']
++  const [source, alt] = SCENES[wait] ?? SCENES[0] ?? ['', '', false]
 +  return {
 +    source: isWorking ? WORKING : source,
 +    width: W,
@@ -731,12 +773,12 @@ diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/clawd-scene.
 +}
 diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/register.tsx /Users/marcwilson/Claude/marc-mods/skins/hooks/register.tsx
 --- a/hooks/register.tsx	2026-10-11 23:47:10
-+++ b/hooks/register.tsx	2026-11-22 15:34:39
++++ b/hooks/register.tsx	2026-11-22 16:06:31
 @@ -14,6 +14,9 @@
  import { copyOf } from './markdown'
  import { CHART_HINT } from './mermaid'
  import { commandSegments } from './command-output'
-+import { WAIT_COUNT } from './clawd-scene'
++import { pickWait } from './clawd-scene'
 +// Marc: below this many reported columns (the desktop reports the window's width) the usage band goes tight.
 +const TIGHT_COLUMNS = 170
  import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
@@ -746,14 +788,14 @@ diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/register.tsx
  
    // The band above the prompt: context and plan limits. Another mod's drawing there,
    // and a survey, keep their place.
-+  // Clawd's waiting scene (0 welding, 1 lab): re-picked each time a turn ends, from the
-+  // clock's milliseconds, which is as random as this needs.
++  // Clawd's waiting scene: re-picked each time a turn ends, from the clock's milliseconds,
++  // which is as random as this needs; a light theme skips the dark-only ones (Marc).
 +  let wasWorking = false
 +  let waitScene = 0
    on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
 +    if (e.props.isWorking !== wasWorking) {
 +      wasWorking = e.props.isWorking
-+      if (!wasWorking) waitScene = (await $.clock.now()) % WAIT_COUNT
++      if (!wasWorking) waitScene = pickWait(await $.clock.now(), await read($, lightAtom))
 +    }
      const active = await activeSkin($)
      const usage = await read($, usageAtom)
@@ -932,11 +974,11 @@ diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/hooks/svg-usage.ts
 -}
 diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/tests/clawd.test.ts /Users/marcwilson/Claude/marc-mods/skins/tests/clawd.test.ts
 --- a/tests/clawd.test.ts	1969-12-31 19:00:00
-+++ b/tests/clawd.test.ts	2026-11-22 15:35:45
-@@ -0,0 +1,30 @@
++++ b/tests/clawd.test.ts	2026-11-22 16:06:31
+@@ -0,0 +1,38 @@
 +import { expect, test } from 'claude-code/testing'
 +
-+import { clawdScene, WAIT_COUNT } from '../hooks/clawd-scene'
++import { clawdScene, pickWait, WAIT_COUNT } from '../hooks/clawd-scene'
 +
 +test('Clawd shoots hoops while working and welds or runs the lab while waiting', () => {
 +  expect(clawdScene(true, 0).source).toContain('@keyframes ball')
@@ -963,6 +1005,14 @@ diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/tests/clawd.test.t
 +    sources.add(scene.source)
 +  }
 +  expect(sources.size).toBe(WAIT_COUNT)
++})
++
++test('a light theme never picks the dark-only burglar scene', () => {
++  const burglar = Array.from({ length: WAIT_COUNT }, (_, i) => i).find(i => clawdScene(false, i).alt.includes('burglar')) ?? -1
++  expect(burglar).toBeGreaterThan(-1)
++  const picked = new Set(Array.from({ length: 500 }, (_, seed) => pickWait(seed, true)))
++  expect(picked.has(burglar)).toBe(false)
++  expect(new Set(Array.from({ length: 500 }, (_, seed) => pickWait(seed, false))).has(burglar)).toBe(true)
 +})
 diff -ruN -x .github -x .claude-plugin -x .gitignore upstream/tests/logic.test.ts /Users/marcwilson/Claude/marc-mods/skins/tests/logic.test.ts
 --- a/tests/logic.test.ts	2026-10-11 16:27:19

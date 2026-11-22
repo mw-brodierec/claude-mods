@@ -14,7 +14,7 @@ import { disclosedRow, openedRows } from './detail-rows'
 import { copyOf } from './markdown'
 import { CHART_HINT } from './mermaid'
 import { commandSegments } from './command-output'
-import { WAIT_COUNT } from './clawd-scene'
+import { pickWait } from './clawd-scene'
 // Marc: below this many reported columns (the desktop reports the window's width) the usage band goes tight.
 const TIGHT_COLUMNS = 170
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
@@ -1117,14 +1117,14 @@ reply width: ${lastColumns} columns`
 
   // The band above the prompt: context and plan limits. Another mod's drawing there,
   // and a survey, keep their place.
-  // Clawd's waiting scene (0 welding, 1 lab): re-picked each time a turn ends, from the
-  // clock's milliseconds, which is as random as this needs.
+  // Clawd's waiting scene: re-picked each time a turn ends, from the clock's milliseconds,
+  // which is as random as this needs; a light theme skips the dark-only ones (Marc).
   let wasWorking = false
   let waitScene = 0
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.isWorking !== wasWorking) {
       wasWorking = e.props.isWorking
-      if (!wasWorking) waitScene = (await $.clock.now()) % WAIT_COUNT
+      if (!wasWorking) waitScene = pickWait(await $.clock.now(), await read($, lightAtom))
     }
     const active = await activeSkin($)
     const usage = await read($, usageAtom)
