@@ -8,12 +8,17 @@
     {
       "name": "skins",
       "source": "./skins",
-      "description": "hellosverre's skins 0.5.3 with Marc's customizations (see skins-customizations.patch)."
+      "description": "hellosverre's skins 0.5.3 with Marc's customizations (see skins-customizations.patch): dials-only usage band, red Compact, Clawd with fifteen wait scenes."
     },
     {
       "name": "savvy-progress",
       "source": "./savvy-progress",
-      "description": "johnnyvizz's savvy-progress 1.2.0 (claude-kit 272a877) with side-session cost/tokens/time and click-to-open rows."
+      "description": "johnnyvizz's savvy-progress 1.2.0 (claude-kit 272a877) with side-session cost/tokens/time, click-to-open rows, and a build jobs view beside the agents."
+    },
+    {
+      "name": "savvy-flow",
+      "source": "./savvy-flow",
+      "description": "johnnyvizz's savvy-flow 1.2.0 (claude-kit 272a877) with build jobs and a memo-first step for mega builds."
     },
     {
       "name": "blast-radius",

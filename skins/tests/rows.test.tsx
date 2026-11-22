@@ -780,13 +780,13 @@ test('while charts are on, the system prompt tells Claude it can answer with one
   expect((await compose()).sections.map(section => section.id)).toEqual(['base'])
 })
 
-const BAND = (surface: (typeof SURFACES)[number], isWorking: boolean) =>
+const BAND = (surface: (typeof SURFACES)[number], isWorking: boolean, columns = 200) =>
   ({
     ...SITE,
     surface,
     component: 'AbovePrompt',
     requestId: 'band',
-    props: { hasSurvey: false, isWorking, maxRows: 4, bodyColumns: 100, scroll: { offset: 0, bodyRows: 4 }, view: {} },
+    props: { hasSurvey: false, isWorking, maxRows: 4, bodyColumns: columns, scroll: { offset: 0, bodyRows: 4 }, view: {} },
   }) as const
 
 test('the band offers Compact, nudges at 70% context, and compacts on a press', async ($, on) => {
@@ -1998,4 +1998,24 @@ test('/skin calm off puts back the settings it changed, and keeps changes made m
   const listed = await runSkin($, 'list')
   expect(JSON.stringify(listed)).toContain('● nord')
   expect(JSON.stringify(listed)).toContain('calm off')
+})
+
+test('a narrow desktop window keeps the band to rings, short labels and the Compact button', async ($, on) => {
+  mock.clock(on, { now: 10_000 })
+  on('session.cwd', () => ({ value: '/work' }))
+  on('store.get', () => ({ value: undefined }))
+  on('ui.render', () => STOCK)
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000, tokens: 850_000, percent: 85 }, rateLimits: [{ kind: 'five_hour', percentUsed: 30 }] } }))
+  on('session.start', () => ({ cwd: '/work' }))
+  on('command.register', () => ({ value: { command: 'skin' } }))
+  on('tool.register', () => ({ value: { tool: 'mcp__skins__design' } }))
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  const band = await $.ui.mount(BAND('desktop', false, 120))
+  // No nudge text and no token count when tight; the Compact button stays.
+  expect(await band.find({ type: 'Text', text: 'Context is 85% full' })).toBeUndefined()
+  expect(await band.find({ key: 'compact' })).toBeDefined()
+  const svg = (await band.findAll({ type: 'Svg' })).map(x => String((x.props as { source?: string }).source)).join('')
+  expect(svg).toContain('ctx')
+  expect(svg).not.toContain('tokens')
+  await band.unmount()
 })

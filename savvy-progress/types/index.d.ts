@@ -42,8 +42,9 @@ export type AgentRun = {
   stepDone?: number
   stepTotal?: number
   stepNote?: string
-  /** A side session's: where a press opens it, its active time, its state. */
+  /** A side session's: where a press opens it, its active time, its state, its short name. */
   link?: string
+  name?: string
   activeMs?: number
   note?: string
 }
@@ -71,6 +72,42 @@ export type Panel = {
   isCompact: boolean
   isDoneCollapsed: boolean
   autoOpenedFor: string
+  /** Marc: the Shipped group of the jobs view folded. */
+  isShippedCollapsed?: boolean
+}
+
+export type JobStatus = 'running' | 'waiting' | 'planned' | 'later' | 'shipped'
+
+/** One job of a build: one PR, run by one or more agents or side sessions. */
+export type Job = {
+  id: string
+  /** Shown above the title, "Job 5" when left out. */
+  label?: string
+  title: string
+  detail?: string
+  status: JobStatus
+  waitingOn?: string
+  pr?: string
+  prUrl?: string
+  /** Side session names or local_… ids, or subagent descriptions, doing this job. */
+  sessions: string[]
+  /** Epoch ms of the job's last change. */
+  updated: number
+}
+
+/** A build of many jobs, kept in ~/.claude/savvy-progress/builds/<id>.json. */
+export type Build = {
+  id: string
+  name: string
+  /** The project root of the session that started it; a new session there picks it up. */
+  project: string
+  summary?: string
+  /** Path or link to the build memo / SOP. */
+  memo?: string
+  jobs: Job[]
+  createdAt: number
+  updatedAt: number
+  isFinished: boolean
 }
 
 declare module 'claude-code' {
@@ -81,6 +118,7 @@ declare module 'claude-code' {
       sessions: SideSession[]
       panel: Panel
       now: number
+      build: Build | null
     }
   }
 }

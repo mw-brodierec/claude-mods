@@ -1,6 +1,7 @@
 """Side sessions the desktop app started from one session: usage, active time, link.
 
-python3 sessions.py <parent cli session id>  ->  JSON list on stdout.
+python3 sessions.py <parent cli session id> [local_… ids]  ->  JSON list on stdout.
+Extra ids are sessions a build's jobs name: listed even when another session started them.
 The desktop app keeps one metadata file per session; each names its CLI
 transcript, whose assistant entries carry the token usage.
 """
@@ -51,7 +52,7 @@ def scan(path):
             'first': stamps[0] if stamps else 0, 'last': stamps[-1] if stamps else 0}
 
 
-def main(parent_cli):
+def main(parent_cli, extra=()):
     try:
         cache = json.load(open(CACHE))
     except (OSError, ValueError):
@@ -60,12 +61,13 @@ def main(parent_cli):
     parent = next((json.loads(t).get('sessionId') for t in metas.values()
                    if parent_cli and parent_cli in t and json.loads(t).get('cliSessionId') == parent_cli), None)
     rows = []
-    for text in metas.values() if parent else []:
-        if parent not in text:
+    extra = set(extra)
+    for text in metas.values() if parent or extra else []:
+        if not ((parent and parent in text) or any(x in text for x in extra)):
             continue
         d = json.loads(text)
         spawned = d.get('spawnedFrom') or {}
-        if spawned.get('sessionId') != parent:
+        if not ((parent and spawned.get('sessionId') == parent) or d.get('sessionId') in extra):
             continue
         cli = d.get('cliSessionId') or ''
         main_files = glob.glob(os.path.join(PROJECTS, '*', cli + '.jsonl'))
@@ -108,4 +110,4 @@ def main(parent_cli):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else '')
+    main(sys.argv[1] if len(sys.argv) > 1 else '', sys.argv[2:])

@@ -14,6 +14,9 @@ import { disclosedRow, openedRows } from './detail-rows'
 import { copyOf } from './markdown'
 import { CHART_HINT } from './mermaid'
 import { commandSegments } from './command-output'
+import { WAIT_COUNT } from './clawd-scene'
+// Marc: below this many reported columns (the desktop reports the window's width) the usage band goes tight.
+const TIGHT_COLUMNS = 170
 import { askBand, desktopSpinnerRow, diffCard, footerRow, terminalCard, usageBand, groupRow, promptRow, quietResult, replyRows, spinnerRow, toolRow } from './rows'
 import type { Look, SvgElement, Ui } from './rows'
 import { galleryPane } from './gallery'
@@ -1121,7 +1124,7 @@ reply width: ${lastColumns} columns`
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.isWorking !== wasWorking) {
       wasWorking = e.props.isWorking
-      if (!wasWorking) waitScene = (await $.clock.now()) % 2
+      if (!wasWorking) waitScene = (await $.clock.now()) % WAIT_COUNT
     }
     const active = await activeSkin($)
     const usage = await read($, usageAtom)
@@ -1159,7 +1162,7 @@ reply width: ${lastColumns} columns`
       $,
       e,
       <Box flexDirection="column">
-        {usageBand(look, meters, !e.props.isWorking && !isCompacting, compact, { isWorking: e.props.isWorking, wait: waitScene })}
+        {usageBand(look, meters, !e.props.isWorking && !isCompacting, compact, { isWorking: e.props.isWorking, wait: waitScene }, look.svg !== undefined && (e.props.bodyColumns || 200) < TIGHT_COLUMNS)}
         {theirs}
       </Box>,
     )

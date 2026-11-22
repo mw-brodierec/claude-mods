@@ -9,8 +9,8 @@ const PANE = {
 
 const SESSION = {
   id: 'local_abc',
-  name: 'p1-doomsday',
-  title: 'Move DoomsDay team Huntington → Freeport',
+  name: 'fence-repair',
+  title: 'Repaint the north fence',
   link: 'claude://claude.ai/epitaxy/local_abc',
   model: 'claude-opus-5-5',
   effort: 'high',
@@ -33,7 +33,7 @@ test('a linked side session shows its cost and time and opens its chat', async (
       return {
         value: {
           value: { title: 'Sweep', total: 2, done: 0, running: 0, phase: 'delegate', isFinished: false, tasks: [
-            { title: 'Move DoomsDay to Freeport', tier: 'careful', after: [], session: 'p1-doomsday' },
+            { title: 'Repaint the fence', tier: 'careful', after: [], session: 'fence-repair' },
             { title: 'Something else', tier: 'light', after: [] },
           ] },
           version: 1,
@@ -60,7 +60,7 @@ test('a linked side session shows its cost and time and opens its chat', async (
   // Cache reads are counted apart from new tokens.
   expect((await ui.find({ type: 'Text', text: /1\.0M new tokens · \+4\.0M cached/ }))?.text).toBeTruthy()
   // The linked task leaves the planned list; the other stays.
-  expect(await ui.find({ type: 'Text', text: /1\. Move DoomsDay/ })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: /1\. Repaint the fence/ })).toBeFalsy()
   await $.ui.press({ plugin: 'savvy-progress', key: 'open-local_abc' })
   expect(opened.at(-1)).toEqual(['open', 'claude://claude.ai/epitaxy/local_abc'])
   await ui.unmount()

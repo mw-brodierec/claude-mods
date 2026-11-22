@@ -7,7 +7,8 @@ import { escape, FONT, measure } from './svg-kit'
 
 const RING_R = 9
 const FILL_MS = 900
-const ITEM_W = 132
+// Marc: no fixed slot per meter; each takes its own width plus this gap, so the band stays short.
+const GAP = 16
 const TEXT_SIZE = 12.5
 const MINUTE_MS = 60_000
 
@@ -63,11 +64,9 @@ export function limitLabel(kind: string): string {
 }
 
 // `countdowns`, by limit label, puts each limit's time to reset beside its meter.
+// Marc: no token count beside the context ring; the ring's percent says the same thing.
 export function metersOf(usage: UsageSnap, countdowns: Record<string, string> = {}): Meter[] {
-  const tokens = usage.tokens === undefined ? '' : `${tokensOf(usage.tokens)}${usage.window === undefined ? '' : ` / ${tokensOf(usage.window)}`} tokens`
-
   return [
-    ...(tokens === '' ? [] : [{ label: 'tokens', percent: 0, text: tokens }]),
     ...(usage.context === null ? [] : [{ label: 'context', percent: usage.context }]),
     ...usage.limits.map(limit => {
       const resets = countdowns[limit.label]
@@ -81,10 +80,16 @@ export function metersOf(usage: UsageSnap, countdowns: Record<string, string> = 
 export const meterColor = (percent: number, palette: Palette): string =>
   percent >= 95 ? palette.err : percent >= 80 ? palette.warn : palette.user
 
-export function usageSvg(meters: readonly Meter[], palette: Palette): { source: string; width: number; height: number; alt: string; entranceMs: number } {
+// The short labels a tight band uses, where the window is narrow.
+const SHORT: Record<string, string> = { context: 'ctx', session: '5h', weekly: '7d' }
+
+// `isTight` (a narrow window) keeps the rings and percents, shortens the labels and drops the countdowns.
+export function usageSvg(meters: readonly Meter[], palette: Palette, isTight = false): { source: string; width: number; height: number; alt: string; entranceMs: number } {
+  const alt = meters.map(meter => meter.text ?? `${meter.label} ${meter.percent}%${meter.resets === undefined ? '' : `, resets in ${meter.resets}`}`).join(', ')
+  if (isTight) meters = meters.map(meter => ({ label: SHORT[meter.label] ?? meter.label, percent: meter.percent, ...(meter.text === undefined ? {} : { text: meter.text }) }))
   // A meter with a countdown is wider than the rest; each starts where the one before ended.
   const widths = meters.map(meter =>
-    meter.text === undefined ? Math.max(ITEM_W, Math.ceil(RING_R * 2 + 12 + measure(meterText(meter), false, TEXT_SIZE) + 20)) : Math.ceil(measure(meter.text, false, TEXT_SIZE) + 24),
+    meter.text === undefined ? Math.ceil(RING_R * 2 + 12 + measure(meterText(meter), false, TEXT_SIZE) + GAP) : Math.ceil(measure(meter.text, false, TEXT_SIZE) + GAP),
   )
   const starts = widths.map((_, i) => widths.slice(0, i).reduce((sum, w) => sum + w, 0))
   const width = widths.reduce((sum, w) => sum + w, 0)
@@ -120,7 +125,7 @@ export function usageSvg(meters: readonly Meter[], palette: Palette): { source: 
     source: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><style>${style}</style>${items}</svg>`,
     width,
     height,
-    alt: meters.map(meter => meter.text ?? `${meter.label} ${meter.percent}%${meter.resets === undefined ? '' : `, resets in ${meter.resets}`}`).join(', '),
+    alt,
     entranceMs: FILL_MS,
   }
 }

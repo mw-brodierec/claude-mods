@@ -867,15 +867,15 @@ export const COMPACT_NUDGE = 70
 
 export const COMPACT_HOTKEY = '0'
 
-function meterView(look: Look, meters: readonly Meter[]) {
+function meterView(look: Look, meters: readonly Meter[], isTight = false) {
   const { Box, Text } = look.ui
   const { palette } = look.skin
 
   if (look.svg !== undefined) {
     const Svg = look.svg
-    const built = usageSvg(meters, palette)
+    const built = usageSvg(meters, palette, isTight)
 
-    return <Svg source={sourceOf(look, `usage:${metersKey(meters)}`, built)} alt={built.alt} width={built.width} height={built.height} />
+    return <Svg source={sourceOf(look, `usage:${isTight ? 'tight:' : ''}${metersKey(meters)}`, built)} alt={built.alt} width={built.width} height={built.height} />
   }
 
   return (
@@ -893,7 +893,9 @@ function meterView(look: Look, meters: readonly Meter[]) {
 // The band above the prompt: the meters, and a Compact button that becomes the main
 // action, with a word on why, once the context is full enough to be worth it.
 // `clawd`, where given, draws the animated Clawd at the row's right end.
-export function usageBand(look: Look, meters: readonly Meter[], canCompact: boolean, compact: () => void, clawd?: { isWorking: boolean; wait: number }) {
+// `isTight` (Marc), for a narrow window: short labels, no countdowns, no nudge text, so the
+// Compact button and Clawd keep their place on the row.
+export function usageBand(look: Look, meters: readonly Meter[], canCompact: boolean, compact: () => void, clawd?: { isWorking: boolean; wait: number }, isTight = false) {
   const { Box, Text, Button } = look.ui
   const { palette } = look.skin
   const context = meters.find(meter => meter.label === 'context')?.percent ?? 0
@@ -901,20 +903,25 @@ export function usageBand(look: Look, meters: readonly Meter[], canCompact: bool
 
   return (
     // The right edge stays clear: the band draws its own collapse mark ([-]) there.
-    <Box flexDirection="row" alignItems="center" columnGap={2} paddingRight={5}>
-      {meterView(look, meters)}
+    // Marc: the band wraps rather than clips. The desktop reports the window's width, not the
+    // band's, so no width is computed here: when the meters leave no room, the Compact
+    // button and Clawd move to a second line together, right-aligned, instead of being cut off.
+    <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={2} rowGap={0} paddingRight={5}>
+      {meterView(look, meters, isTight)}
       <Box flexGrow={1} />
-      {canCompact && isNudge ? <Text color={palette.warn}>{`Context is ${context}% full`}</Text> : ''}
-      {canCompact ? (
-        // A digit hotkey: typed alone into an empty prompt it presses the band's button, which
-        // is the only way in where the terminal reports no clicks. `plain` shows it: `0: Compact`. The desktop takes clicks, so it gets the red button alone.
-        <Button key="compact" label={isNudge ? 'Compact now' : 'Compact'} {...(look.surface === 'terminal' ? { hotkey: COMPACT_HOTKEY } : {})} plain onPress={compact}>
-          <Text color="#FFFFFF" backgroundColor="#D9482B" bold>{` ${isNudge ? 'Compact now' : 'Compact'} `}</Text>
-        </Button>
-      ) : (
-        ''
-      )}
-      {look.svg === undefined || clawd === undefined ? '' : <look.svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />}
+      <Box flexDirection="row" alignItems="center" columnGap={2} flexShrink={0} flexGrow={1} justifyContent="flex-end">
+        {canCompact && isNudge && !isTight ? <Text color={palette.warn}>{`Context is ${context}% full`}</Text> : ''}
+        {canCompact ? (
+          // A digit hotkey: typed alone into an empty prompt it presses the band's button, which
+          // is the only way in where the terminal reports no clicks. `plain` shows it: `0: Compact`. The desktop takes clicks, so it gets the red button alone.
+          <Button key="compact" label={isNudge ? 'Compact now' : 'Compact'} {...(look.surface === 'terminal' ? { hotkey: COMPACT_HOTKEY } : {})} plain onPress={compact}>
+            <Text color="#FFFFFF" backgroundColor="#D9482B" bold>{` ${isNudge ? 'Compact now' : 'Compact'} `}</Text>
+          </Button>
+        ) : (
+          ''
+        )}
+        {look.svg === undefined || clawd === undefined ? '' : <look.svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />}
+      </Box>
     </Box>
   )
 }
