@@ -250,24 +250,38 @@ export function pilotSvg(): string {
   return svg(style, `${clouds}<g class="fly">${scarf}${standing(look, true)}${plane}</g>`)
 }
 
-export function judgeSvg(): string {
-  // Powdered wig and robe at the bench; the gavel comes down on the block.
+export function dartsSvg(): string {
+  // Marc: at the oche in the pub, throwing darts. 2.6s loop: the arm draws back, snaps forward,
+  // the dart arcs across and sticks in the board, then the next one is in his claw again.
   const style = css([
     blinkEyes,
-    '.gavel{transform-box:fill-box;transform-origin:0% 50%;animation:bang 1.6s infinite}',
-    '@keyframes bang{0%,40%{transform:rotate(-40deg);animation-timing-function:ease-in}50%,62%{transform:rotate(0)}100%{transform:rotate(-40deg)}}',
-    '.hit{animation:hit 1.6s infinite}@keyframes hit{0%,49%,64%,100%{opacity:0}50%,60%{opacity:1}}',
+    '.arm{transform-box:view-box;transform-origin:31px 17.5px;animation:arm 2.6s infinite}',
+    '@keyframes arm{0%,12%{transform:rotate(0)}26%{transform:rotate(-38deg);animation-timing-function:ease-in}32%{transform:rotate(18deg)}44%,100%{transform:rotate(0)}}',
+    '.dart{animation:dart 2.6s infinite}',
+    '@keyframes dart{0%,12%{transform:translate(35px,16.5px);opacity:1}26%{transform:translate(32px,13px)}32%{transform:translate(36px,15px);animation-timing-function:linear}' +
+      '38%{transform:translate(57px,9.5px);animation-timing-function:linear}44%,86%{transform:translate(79.5px,12px);opacity:1}92%{transform:translate(79.5px,12px);opacity:0}93%{transform:translate(35px,16.5px);opacity:0}100%{transform:translate(35px,16.5px);opacity:1}}',
+    '.thud{transform-box:fill-box;transform-origin:50% 50%;animation:thud 2.6s infinite}',
+    '@keyframes thud{0%,43%,52%,100%{transform:scale(1)}46%{transform:scale(1.04)}}',
   ])
-  const look =
-    `<rect x="${0.5 * U}" y="${-1.8 * U}" width="${10 * U}" height="${2 * U}" rx="2.5" fill="#EDEBE6"/>` +
-    pf('#EDEBE6', px(-0.6, -0.4, 1.5, 3.6), px(10.1, -0.4, 1.5, 3.6)) +
-    pf('#CFCBC2', px(1.5, -1.3, 0.6, 0.5), px(3.5, -1.3, 0.6, 0.5), px(5.5, -1.3, 0.6, 0.5), px(7.5, -1.3, 0.6, 0.5), px(-0.2, 0.4, 0.6, 0.5), px(-0.2, 1.8, 0.6, 0.5), px(10.5, 0.4, 0.6, 0.5), px(10.5, 1.8, 0.6, 0.5)) +
-    eyes + pf('#1E1E22', px(1, 3, 9, 2)) + pf('#FFFFFF', px(5, 3, 1, 1.3))
-  const bench = `<rect x="0" y="22" width="44" height="8" fill="#6B4226"/><rect x="-1" y="21" width="46" height="1.6" fill="#8B5A2B"/><rect x="14" y="24" width="16" height="4" fill="#5A3519" opacity=".6"/>`
-  const block = `<rect x="38" y="19.4" width="5" height="1.6" fill="#5A3519"/>`
-  const gavel = `<g class="gavel"><rect x="31" y="17.6" width="9" height="1.1" fill="#A0703F"/><rect x="38.6" y="15.2" width="3.2" height="5" rx=".6" fill="#6B4226"/></g>`
-  const hit = `<g class="hit" stroke="#E3B341" stroke-width=".6"><path d="M44 18l2-2M45 20h2.5M44 22l2 1.5"/></g>`
-  return svg(style, `${standing(look)}${bench}${block}${gavel}${hit}`)
+  // Board on the wall at (83, 12.5): black rim, cream and black wedges, red and green rings, the bull.
+  const cx = 83
+  const cy = 12.5
+  const ring = (r: number, w: number, a: string, b: string) =>
+    `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${a}" stroke-width="${w}"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${b}" stroke-width="${w}" stroke-dasharray="${((2 * Math.PI * r) / 20).toFixed(3)}" />`
+  const board =
+    `<rect x="${cx - 12}" y="0" width="24" height="25" rx="1.5" fill="#3B2A1E"/>` +
+    `<g class="thud"><circle cx="${cx}" cy="${cy}" r="10.6" fill="#1E1E22"/>` +
+    ring(4.5, 9, '#F1E6C8', '#1E1E22') +
+    ring(8.7, 1.2, '#C8102E', '#1F7A44') +
+    ring(5.1, 1, '#C8102E', '#1F7A44') +
+    `<circle cx="${cx}" cy="${cy}" r="1.6" fill="#1F7A44"/><circle cx="${cx}" cy="${cy}" r=".8" fill="#C8102E"/>` +
+    // Two darts from earlier throws, already in the board.
+    `<g transform="translate(${cx - 2} ${cy + 4}) rotate(-8)"><rect x="-5" y="-.5" width="3.6" height="1" fill="#3A3A3E"/><path d="M-5 0L-7.5 -1.6V1.6Z" fill="#2F6FB0"/></g>` +
+    `<g transform="translate(${cx + 1.5} ${cy - 3.5}) rotate(6)"><rect x="-5" y="-.5" width="3.6" height="1" fill="#3A3A3E"/><path d="M-5 0L-7.5 -1.6V1.6Z" fill="#2F6FB0"/></g></g>`
+  const oche = `<rect x="0" y="29.2" width="40" height=".8" fill="#C9A227"/><rect x="40" y="29.4" width="56" height=".6" fill="#8A8580" opacity=".5"/>`
+  const arm = `<g class="arm"><rect x="31" y="16.9" width="4.5" height="1.3" rx=".6" fill="${ORANGE}"/></g>`
+  const dart = `<g class="dart"><path d="M1.6 0L0 -.45V.45Z" fill="#D8D4CC"/><rect x="-4" y="-.55" width="4" height="1.1" rx=".4" fill="#3A3A3E"/><rect x="-5.4" y="-.25" width="1.6" height=".5" fill="#8A8580"/><path d="M-5 0L-8 -2V2Z" fill="#D9482B"/></g>`
+  return svg(style, `${board}${oche}${standing(eyes)}${arm}${dart}`)
 }
 
 // The pencil's path round the house outline: [% of the loop, arm angle in degrees, arm length].
@@ -734,7 +748,7 @@ const SCENES: [string, string, boolean?][] = [
   [labSvg(), 'Clawd in a lab coat pouring a glowing beaker'],
   [generalSvg(), 'Clawd in navy dress whites saluting the American and Canadian flags'],
   [pilotSvg(), 'Clawd flying a biplane through the clouds'],
-  [judgeSvg(), 'Clawd in a wig banging the gavel at the bench'],
+  [dartsSvg(), 'Clawd throwing darts at the board in the pub'],
   [architectSvg(), 'Clawd drawing a house onto a blueprint floor plan'],
   [astronautSvg(), 'Clawd at the window of a stainless rocket ship bound for Mars'],
   [shuttleSvg(), 'Clawd on a spacewalk by the Canadarm fixing the shuttle wing above the Earth, the Moon beyond'],

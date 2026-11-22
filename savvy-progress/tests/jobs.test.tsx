@@ -124,22 +124,22 @@ test('the desktop pane has a Stacked / Side by side switch, and the band is one 
   harness(on)
   await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
 
+  const label = async (ui: { find: (q: object) => Promise<unknown> }, key: string) => ((await ui.find({ type: 'Button', key })) as { props: { label: string } } | undefined)?.props.label
   const wide = { ...PANE, surface: 'desktop' as const, props: { ...PANE.props, bodyColumns: 140 } }
   const side = await $.ui.mount(wide)
-  // Wide, it opens side by side: the switch says so and both columns share a wrapping row.
-  expect(await side.find({ type: 'Text', text: /● Side by side/ })).toBeTruthy()
-  expect(await side.find({ type: 'Text', text: /○ Stacked/ })).toBeTruthy()
+  // Wide, it opens side by side, two equal columns; the switch marks the choice in its labels.
+  expect(await label(side, 'layout-side')).toBe('● Side by side')
+  const cols = (await side.findAll({ type: 'Box' })) as { key?: string; props: { flexGrow?: number; width?: number } }[]
+  expect(cols.filter(x => (x.key === 'jobs-col' || x.key === 'agents-col') && x.props.flexGrow === 1 && x.props.width === 0).length).toBe(2)
   await side.press({ key: 'layout-stacked' })
-  expect(await side.find({ type: 'Text', text: /● Stacked/ })).toBeTruthy()
+  expect(await label(side, 'layout-stacked')).toBe('● Stacked')
   await side.unmount()
 
-  // A narrow pane opens stacked; choosing Side by side really puts the columns side by side.
+  // Too narrow for two legible columns: it stays stacked and says why.
   const narrow = await $.ui.mount({ ...wide, props: { ...wide.props, bodyColumns: 60 } })
-  expect(await narrow.find({ type: 'Text', text: /● Stacked/ })).toBeTruthy()
   await narrow.press({ key: 'layout-side' })
-  expect(await narrow.find({ type: 'Text', text: /● Side by side/ })).toBeTruthy()
-  const rows = (await narrow.findAll({ type: 'Box' })) as { props: { flexDirection?: string } }[]
-  expect(rows.some(x => x.props.flexDirection === 'row')).toBe(true)
+  expect(await label(narrow, 'layout-stacked')).toBe('● Stacked')
+  expect(await narrow.find({ type: 'Text', text: /Widen the pane/ })).toBeTruthy()
   await narrow.unmount()
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })

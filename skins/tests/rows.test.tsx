@@ -2001,7 +2001,7 @@ test('/skin calm off puts back the settings it changed, and keeps changes made m
   expect(JSON.stringify(listed)).toContain('calm off')
 })
 
-test('the desktop band keeps whatever fits its width: Clawd and long labels first to go, the context ring last', async ($, on) => {
+test('the desktop band keeps whatever fits its width: long labels and extra dials go before the animation', async ($, on) => {
   mock.clock(on, { now: 10_000 })
   on('session.cwd', () => ({ value: '/work' }))
   on('store.get', () => ({ value: undefined }))
@@ -2027,9 +2027,10 @@ test('the desktop band keeps whatever fits its width: Clawd and long labels firs
   const yours = await drawn(89)
   expect(yours.compact).toBeDefined()
   expect(yours.alts.length).toBe(2)
-  // A phone-narrow band: short labels, then Clawd goes.
+  // A narrow band: the 5h dial goes before the animation does.
   const narrow = await drawn(45)
-  expect(narrow.svgs[0]).toContain('ctx')
+  expect(narrow.svgs[0]).not.toContain('5h')
+  expect(narrow.alts.some(a => a.startsWith('Clawd'))).toBe(true)
   expect(narrow.compact).toBeDefined()
   // The narrowest: the context ring alone, its percent inside, and a smaller Compact.
   const tiny = await drawn(20)

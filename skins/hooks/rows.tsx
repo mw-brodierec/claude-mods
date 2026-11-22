@@ -901,9 +901,11 @@ function meterView(look: Look, meters: readonly Meter[], isTight = false) {
 //
 // Which parts show is decided from widths in pixels. The band's `bodyColumns` counts cells of the
 // app's code font (about 8px each), so the room is taken at a slightly smaller cell to stay safe,
-// and every part's own width is measured. The band shows the fullest layout that fits: the Clawd
-// scene goes first, then the long labels, then the 5h and 7d dials, and at its narrowest only the
-// context ring with its percent inside. Anything still too wide is clipped, never spilled.
+// and every part's own width is measured. The band shows the fullest layout that fits: the nudge
+// goes first, then the long labels, then the 5h and 7d dials (Marc: the animation outranks them),
+// then the context label, leaving the ring with its percent inside, and last the animation.
+// The band hugs what it shows, so the room at its right end matches the gaps between its parts.
+// Anything still too wide is clipped, never spilled.
 export const GLASS_EDGE = '#9a9a9a59'
 export const GLASS_FILL = '#8080800d'
 const GLASS_CAPSULE = '#8080801f'
@@ -917,21 +919,24 @@ type BandLayout = { isTight: boolean; isMinimal: boolean; onlyContext: boolean; 
 
 // The fullest layout whose parts fit `columns` cells. Exported for the tests.
 export function bandLayout(meters: readonly Meter[], palette: Look['skin']['palette'], columns: number, canCompact: boolean, label: string, hasClawd: boolean, isNudge: boolean): BandLayout {
-  const room = columns * CELL_PX - 2 * 8 - 4
+  // The desktop draws no [-] mark, so the five cells bodyColumns leaves out are the band's too.
+  const room = (columns + 5) * CELL_PX - 4 * 8 - 4
   const gap = GAP_CELLS * 8
   const compactW = canCompact ? measure(` ${label} `, false, 14) * 1.08 + 18 : 0
   const nudgeW = measure(`Context is 100% full`, false, 13)
   const contextOnly = meters.filter(m => m.label === 'context')
   const width = (parts: number[]): number => parts.filter(w => w > 0).reduce((sum, w, i) => sum + w + (i ? gap : 0), 0)
+  // Marc: the animation outranks the 5h and 7d dials, so it stays while the context ring does.
   const tries: BandLayout[] = [
     { isTight: false, isMinimal: false, onlyContext: false, clawd: hasClawd, nudge: isNudge },
     { isTight: false, isMinimal: false, onlyContext: false, clawd: hasClawd, nudge: false },
     { isTight: true, isMinimal: false, onlyContext: false, clawd: hasClawd, nudge: false },
-    { isTight: true, isMinimal: false, onlyContext: false, clawd: false, nudge: false },
+    { isTight: true, isMinimal: false, onlyContext: true, clawd: hasClawd, nudge: false },
+    { isTight: true, isMinimal: true, onlyContext: true, clawd: hasClawd, nudge: false },
     { isTight: true, isMinimal: false, onlyContext: true, clawd: false, nudge: false },
   ]
   for (const t of tries) {
-    const dials = usageSvg(t.onlyContext ? contextOnly : meters, palette, t.isTight).width
+    const dials = usageSvg(t.onlyContext ? contextOnly : meters, palette, t.isTight, t.isMinimal).width
     if (width([dials, t.nudge ? nudgeW : 0, compactW, t.clawd ? CLAWD_W : 0]) <= room) return t
   }
   return { isTight: true, isMinimal: true, onlyContext: true, clawd: false, nudge: false }
@@ -951,7 +956,7 @@ export function usageBand(look: Look, meters: readonly Meter[], canCompact: bool
     const built = usageSvg(shown, palette, fit.isTight, fit.isMinimal)
     const tier = fit.isMinimal ? 'min:' : fit.onlyContext ? 'ctx:' : fit.isTight ? 'tight:' : ''
     return (
-      <Box key="usage-glass" position="relative" overflow="hidden" flexDirection="row" alignItems="center" columnGap={GAP_CELLS} paddingX={1} borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL}>
+      <Box key="usage-glass" position="relative" overflow="hidden" alignSelf="flex-start" flexDirection="row" alignItems="center" columnGap={GAP_CELLS} paddingX={GAP_CELLS} borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL}>
         <Box key="sheen" position="absolute" top={0} left={0}>
           <Svg source={GLASS_SHEEN} alt="" width={2400} height={40} />
         </Box>

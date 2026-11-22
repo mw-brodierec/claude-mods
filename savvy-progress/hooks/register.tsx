@@ -237,7 +237,9 @@ const barText = (r: number, width: number): string => {
 
 const JOB_COLORS = JOB_THEME.status
 // Pane width, CSS px, from which jobs and agents sit side by side; the gap between them.
-const SIDE_BY_SIDE = 640
+// Marc: the narrowest a column may be with its text still easy to read.
+const MIN_COL = 320
+const PANE_CELL_PX = 7.4
 
 // Marc: native glass for the band, neutral so it reads on light and dark. Translucent fill and
 // edge and a soft light across the top; no hover effect. The skins band wears the same.
@@ -1192,18 +1194,23 @@ export const register: Register = (on, options) => {
     const isEmpty = list.length === 0 && planned.length === 0
     const summary = `≈${fmtCost(t.cost)}, ${fmtTokens(t.fresh)} ${s.fresh} ${s.tokensWord} (+${fmtTokens(t.cached)} ${s.cached}), ${fmtTime(t.time)}`
     const groups = b ? GROUPS.map(g => ({ g, jobs: b.jobs.filter(j => j.status === g) })).filter(x => x.jobs.length) : []
+    // Marc: a file path as the memo is a short link that opens the file, not the whole path.
+    const memoButton = (path: string) => (
+      <Button key="memo" label={`${path.split('/').pop() || s.memo} ↗`} plain onPress={() => void $.process.run(['open', path])} />
+    )
     const prLink = (j: Job) => (j.prUrl ? <Link key={`pr-${j.id}`} href={j.prUrl} label={`PR ${j.pr ?? ''} ↗`.replace('  ', ' ')} /> : null)
 
     if (e.surface === 'desktop' && 'Svg' in ui) {
       const { Svg } = ui
-      const W = Math.max(240, Math.min(1400, (e.props.bodyColumns || 40) * 8 - 8))
-      // Marc: with a build, jobs and agents sit side by side once the pane is wide enough;
-      // narrower, the row wraps and agents follow below the jobs.
-      // Marc: the switch's choice wins. With none made, the pane's width decides. The default could
-      // already be stacked, which is why choosing it earlier seemed to do nothing.
-      const isSide = p.layout ? p.layout === 'side' : W >= SIDE_BY_SIDE
+      // bodyColumns counts cells of the app's code font, about 8px; taken a little smaller so the
+      // drawings never run past the pane's edge.
+      const W = Math.max(240, Math.min(1400, Math.round((e.props.bodyColumns || 40) * PANE_CELL_PX) - 8))
+      // Marc: the switch's choice wins, but side by side only where both columns stay legible
+      // (MIN_COL each). Narrower, the pane stacks rather than shrink the text past reading.
+      const canSide = W >= MIN_COL * 2 + COL_GAP_PX
+      const isSide = canSide && (p.layout ? p.layout === 'side' : true)
       const isWide = Boolean(b) && isSide
-      const CW = b ? (isWide ? Math.max(240, Math.floor((W - COL_GAP_PX) / 2)) : W) : W
+      const CW = b ? (isWide ? Math.floor((W - COL_GAP_PX) / 2) : W) : W
       const AW = Math.min(CW, 900)
       const section = (key: string, text: string) => (
         <Text key={key} dimColor>
@@ -1223,7 +1230,7 @@ export const register: Register = (on, options) => {
         )
       }
       const agentsColumn = (
-        <Box key="agents-col" flexDirection="column">
+        <Box key="agents-col" flexDirection="column" {...(isWide ? { width: 0, flexGrow: 1, minWidth: 0 } : {})}>
           <Svg isInteractive source={headerSvg(AW, title, t, running.length > 0)} alt={title ? `${title}: ${summary}` : summary} width={AW} height={headerHeight(title)} />
           {toggleCompact}
           {isEmpty && <Text dimColor>{s.empty}</Text>}
@@ -1255,9 +1262,9 @@ export const register: Register = (on, options) => {
         ]
       }
       const jobsColumn = (
-        <Box key="jobs-col" flexDirection="column" gap={1}>
+        <Box key="jobs-col" flexDirection="column" gap={1} {...(isWide ? { width: 0, flexGrow: 1, minWidth: 0 } : {})}>
           <Svg isInteractive source={header.source} alt={`${b.name}: ${summaryLine(b)}`} width={CW} height={header.height} />
-          {b.memo && (/^https?:/.test(b.memo) ? <Link key="memo" href={b.memo} label={s.memo} /> : <Text key="memo" dimColor>{b.memo}</Text>)}
+          {b.memo && (/^https?:/.test(b.memo) ? <Link key="memo" href={b.memo} label={s.memo} /> : memoButton(b.memo))}
           {groups.length === 0 && <Text dimColor>{s.noJobs}</Text>}
           {groups.flatMap(({ g, jobs }) =>
             g === 'shipped'
@@ -1267,14 +1274,12 @@ export const register: Register = (on, options) => {
         </Box>
       )
       // Marc: a switch at the top right chooses between the two columns and one above the other.
+      // The desktop draws a Button's label, so the choice is marked in the label itself.
       const layoutSwitch = (
         <Box key="layout" flexDirection="row" justifyContent="flex-end" alignItems="center" columnGap={1}>
-          <Button key="layout-stacked" label="Stacked" plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'stacked' as const }))}>
-            <Text bold={!isSide} dimColor={isSide}>{isSide ? '○ Stacked' : '● Stacked'}</Text>
-          </Button>
-          <Button key="layout-side" label="Side by side" plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'side' as const }))}>
-            <Text bold={isSide} dimColor={!isSide}>{isSide ? '● Side by side' : '○ Side by side'}</Text>
-          </Button>
+          {p.layout === 'side' && !canSide ? <Text key="layout-hint" dimColor>Widen the pane for side by side</Text> : ''}
+          <Button key="layout-stacked" label={isSide ? '○ Stacked' : '● Stacked'} plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'stacked' as const }))} />
+          <Button key="layout-side" label={isSide ? '● Side by side' : '○ Side by side'} plain onPress={() => update($, panel, prev => ({ ...prev, layout: 'side' as const }))} />
         </Box>
       )
       return (
