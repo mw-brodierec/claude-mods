@@ -75,7 +75,7 @@ export type Panel = {
   /** Marc: the Shipped group of the jobs view folded. */
   isShippedCollapsed?: boolean
   // Marc: the pane's jobs and agents one above the other instead of side by side.
-  isStacked?: boolean
+  layout?: 'stacked' | 'side'
 }
 
 export type JobStatus = 'running' | 'waiting' | 'planned' | 'later' | 'shipped'
