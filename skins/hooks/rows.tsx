@@ -862,11 +862,6 @@ export function terminalCard(look: Look, Svg: SvgElement, output: ShellOutput, i
   return cardWithCopy(withCopy, Svg, terminalSvg(output, isErrored, look.skin.palette, cardWidth(columns), withCopy.copy !== undefined, look.prefs.highlight), key, text)
 }
 
-// From this full, the band suggests compacting and makes it the main action.
-export const COMPACT_NUDGE = 70
-
-export const COMPACT_HOTKEY = '0'
-
 function meterView(look: Look, meters: readonly Meter[], isTight = false) {
   const { Box, Text } = look.ui
   const { palette } = look.skin
@@ -890,69 +885,60 @@ function meterView(look: Look, meters: readonly Meter[], isTight = false) {
   )
 }
 
-// The band above the prompt: the meters, and a Compact button that becomes the main
-// action, with a word on why, once the context is full enough to be worth it.
+// The band above the prompt: the meters. Marc: no Compact button; fast-jev-compaction compacts
+// on its own at 60% context.
 // `clawd`, where given, draws the animated Clawd at the row's right end.
-// `isTight` (Marc), for a narrow window: short labels, no countdowns, no nudge text, so the
-// Compact button and Clawd keep their place on the row.
+// `isTight` (Marc), for a narrow window: short labels, no countdowns, so Clawd keeps its place.
 // Marc: on the desktop the whole band is one glass bar like the Agents panels, neutral so it reads
-// on light and dark, lit by a soft sheen across the top, with no hover effect. Compact is a glass
-// capsule inside it that hugs its button, so the button's own hover fills it exactly.
+// on light and dark, lit by a soft sheen across the top, with no hover effect.
 //
 // Which parts show is decided from widths in pixels. The band's `bodyColumns` counts cells of the
 // app's code font (about 8px each), so the room is taken at a slightly smaller cell to stay safe,
-// and every part's own width is measured. The band shows the fullest layout that fits: the nudge
-// goes first, then the long labels, then the 5h and 7d dials (Marc: the animation outranks them),
+// and every part's own width is measured. The band shows the fullest layout that fits: the long
+// labels go first, then the 5h and 7d dials (Marc: the animation outranks them),
 // then the context label, leaving the ring with its percent inside, and last the animation.
 // Marc: the band spans the full width like the build bar below it, and its parts are spread
 // evenly, so the room at each end matches the gaps between them.
 // Anything still too wide is clipped, never spilled.
 export const GLASS_EDGE = '#9a9a9a59'
 export const GLASS_FILL = '#8080800d'
-const GLASS_CAPSULE = '#8080801f'
 const CELL_PX = 7.4
 const GAP_CELLS = 2
 
 // The light across the top: a wide drawing pinned under everything, clipped by the band's corners.
 export const GLASS_SHEEN = `<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="40" viewBox="0 0 2400 40"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".14"/><stop offset=".6" stop-color="#fff" stop-opacity=".03"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="r" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".35" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity=".28"/></linearGradient></defs><rect width="2400" height="40" fill="url(#s)"/><rect width="2400" height="1" fill="url(#r)"/></svg>`
 
-type BandLayout = { isTight: boolean; isMinimal: boolean; onlyContext: boolean; clawd: boolean; nudge: boolean }
+type BandLayout = { isTight: boolean; isMinimal: boolean; onlyContext: boolean; clawd: boolean }
 
 // The fullest layout whose parts fit `columns` cells. Exported for the tests.
-export function bandLayout(meters: readonly Meter[], palette: Look['skin']['palette'], columns: number, canCompact: boolean, label: string, hasClawd: boolean, isNudge: boolean): BandLayout {
+export function bandLayout(meters: readonly Meter[], palette: Look['skin']['palette'], columns: number, hasClawd: boolean): BandLayout {
   // The desktop draws no [-] mark, so the five cells bodyColumns leaves out are the band's too.
   const room = (columns + 5) * CELL_PX - 4 * 8 - 4
   const gap = GAP_CELLS * 8
-  const compactW = canCompact ? measure(` ${label} `, false, 14) * 1.08 + 18 : 0
-  const nudgeW = measure(`Context is 100% full`, false, 13)
   const contextOnly = meters.filter(m => m.label === 'context')
   const width = (parts: number[]): number => parts.filter(w => w > 0).reduce((sum, w, i) => sum + w + (i ? gap : 0), 0)
   // Marc: the animation outranks the 5h and 7d dials, so it stays while the context ring does.
   const tries: BandLayout[] = [
-    { isTight: false, isMinimal: false, onlyContext: false, clawd: hasClawd, nudge: isNudge },
-    { isTight: false, isMinimal: false, onlyContext: false, clawd: hasClawd, nudge: false },
-    { isTight: true, isMinimal: false, onlyContext: false, clawd: hasClawd, nudge: false },
-    { isTight: true, isMinimal: false, onlyContext: true, clawd: hasClawd, nudge: false },
-    { isTight: true, isMinimal: true, onlyContext: true, clawd: hasClawd, nudge: false },
-    { isTight: true, isMinimal: false, onlyContext: true, clawd: false, nudge: false },
+    { isTight: false, isMinimal: false, onlyContext: false, clawd: hasClawd },
+    { isTight: true, isMinimal: false, onlyContext: false, clawd: hasClawd },
+    { isTight: true, isMinimal: false, onlyContext: true, clawd: hasClawd },
+    { isTight: true, isMinimal: true, onlyContext: true, clawd: hasClawd },
+    { isTight: true, isMinimal: false, onlyContext: true, clawd: false },
   ]
   for (const t of tries) {
     const dials = usageSvg(t.onlyContext ? contextOnly : meters, palette, t.isTight, t.isMinimal).width
-    if (width([dials, t.nudge ? nudgeW : 0, compactW, t.clawd ? CLAWD_W : 0]) <= room) return t
+    if (width([dials, t.clawd ? CLAWD_W : 0]) <= room) return t
   }
-  return { isTight: true, isMinimal: true, onlyContext: true, clawd: false, nudge: false }
+  return { isTight: true, isMinimal: true, onlyContext: true, clawd: false }
 }
 
-export function usageBand(look: Look, meters: readonly Meter[], canCompact: boolean, compact: () => void, clawd?: { isWorking: boolean; wait: number }, isTight = false, columns = 200) {
-  const { Box, Text, Button } = look.ui
+export function usageBand(look: Look, meters: readonly Meter[], clawd?: { isWorking: boolean; wait: number }, isTight = false, columns = 200) {
+  const { Box } = look.ui
   const { palette } = look.skin
-  const context = meters.find(meter => meter.label === 'context')?.percent ?? 0
-  const isNudge = context >= COMPACT_NUDGE
-  const label = isNudge ? 'Compact now' : 'Compact'
 
   if (look.surface !== 'terminal' && look.svg !== undefined) {
     const Svg = look.svg
-    const fit = bandLayout(meters, palette, columns, canCompact, label, clawd !== undefined, isNudge)
+    const fit = bandLayout(meters, palette, columns, clawd !== undefined)
     const shown = fit.onlyContext ? meters.filter(m => m.label === 'context') : meters
     const built = usageSvg(shown, palette, fit.isTight, fit.isMinimal)
     const tier = fit.isMinimal ? 'min:' : fit.onlyContext ? 'ctx:' : fit.isTight ? 'tight:' : ''
@@ -964,16 +950,6 @@ export function usageBand(look: Look, meters: readonly Meter[], canCompact: bool
         <Box flexShrink={0}>
           <Svg source={sourceOf(look, `usage:${tier}${metersKey(meters)}`, built)} alt={built.alt} width={built.width} height={built.height} />
         </Box>
-        {fit.nudge ? <Text color={palette.warn} wrap="truncate-end">{`Context is ${context}% full`}</Text> : ''}
-        {canCompact ? (
-          <Box key="compact-glass" flexShrink={0} borderStyle="round" borderColor={isNudge ? palette.warn : GLASS_EDGE} backgroundColor={isNudge ? '#D9482B26' : GLASS_CAPSULE}>
-            <Button key="compact" label={label} plain onPress={compact}>
-              <Text color={isNudge ? palette.warn : palette.fg} bold>{fit.isMinimal ? label : ` ${label} `}</Text>
-            </Button>
-          </Box>
-        ) : (
-          ''
-        )}
         {clawd !== undefined && fit.clawd ? (
           <Box flexShrink={0}>
             <Svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />
@@ -985,22 +961,10 @@ export function usageBand(look: Look, meters: readonly Meter[], canCompact: bool
     )
   }
 
-  const compactButton = !canCompact ? (
-    ''
-  ) : (
-    // A digit hotkey: typed alone into an empty prompt it presses the band's button, which
-    // is the only way in where the terminal reports no clicks. `plain` shows it: `0: Compact`.
-    <Button key="compact" label={label} {...(look.surface === 'terminal' ? { hotkey: COMPACT_HOTKEY } : {})} plain onPress={compact}>
-      <Text color="#FFFFFF" backgroundColor="#D9482B" bold>{` ${label} `}</Text>
-    </Button>
-  )
-
   return (
     // The right edge stays clear: the band draws its own collapse mark ([-]) there.
     <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap={2} rowGap={0} paddingRight={5}>
       {meterView(look, meters, isTight)}
-      {canCompact && isNudge && !isTight ? <Text color={palette.warn}>{`Context is ${context}% full`}</Text> : ''}
-      {compactButton}
       {look.svg === undefined || clawd === undefined ? '' : <look.svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />}
     </Box>
   )

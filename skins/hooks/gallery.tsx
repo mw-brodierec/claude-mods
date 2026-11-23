@@ -101,9 +101,9 @@ export function galleryPane(look: Look, columns: number) {
             desktopSpinnerRow(look, svg, 'requesting', 'Waiting for the model'),
           )}
       {section(
-        'Band above the prompt: normal, then nudging to compact',
-        usageBand(look, [{ label: 'context', percent: 42 }, { label: '5h', percent: 18 }], true, () => undefined),
-        usageBand(look, [{ label: 'context', percent: 85 }, { label: '5h', percent: 61 }], true, () => undefined),
+        'Band above the prompt: normal, then nearly full',
+        usageBand(look, [{ label: 'context', percent: 42 }, { label: '5h', percent: 18 }]),
+        usageBand(look, [{ label: 'context', percent: 85 }, { label: '5h', percent: 61 }]),
       )}
       {section('Band above a question', askBand(look, ['Approach', 'Store']))}
       {section('Turn footer (terminal)', footerRow(look, look.skin.done[0] ?? 'Done', 41_000, { tools: 6, added: 18, removed: 3 }))}

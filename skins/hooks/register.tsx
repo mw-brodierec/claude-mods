@@ -73,7 +73,6 @@ const commandAtom = atom({ plugin: 'skins', key: 'command' } as const, '')
 const usageAtom = atom({ plugin: 'skins', key: 'usage' } as const, { context: null, limits: [] } as UsageSnap)
 // The band's countdowns as last drawn; it changes only when one of them reads differently.
 const countdownsAtom = atom({ plugin: 'skins', key: 'countdowns' } as const, {} as Record<string, string>)
-const compactingAtom = atom({ plugin: 'skins', key: 'compacting' } as const, false)
 const pinnedAtom = atom({ plugin: 'skins', key: 'pinned' } as const, false)
 const settleAtom = atom({ plugin: 'skins', key: 'settle' } as const, 0)
 // Whether each tool row is open, as the person left it; `auto` opens a failed call.
@@ -1140,29 +1139,13 @@ reply width: ${lastColumns} columns`
     const plain = lookOf($.ui.resolve(e), active, e.surface)
     const { Box } = plain.ui
     const theirs = await next(e)
-    // Compacting mid-turn would cut the turn's own context out from under it.
-    // Runs Claude Code's own /compact, so the person sees its usual progress and result.
-    // Work a press starts is abandoned when the press ends, which cancels a compaction
-    // still running, so a timer starts it in a dispatch of its own, which returns the run
-    // so that dispatch lasts until the compaction ends. The button hides until then, so
-    // repeated presses do not queue one /compact each.
-    const isCompacting = await read($, compactingAtom)
-    const compact = () => {
-      void update($, compactingAtom, () => true)
-      $.clock.after(1, () =>
-        $.command
-          .run({ command: 'compact' })
-          .catch((error: unknown) => $.ui.toast(`Compacting failed: ${error instanceof Error ? error.message : String(error)}`))
-          .finally(() => update($, compactingAtom, () => false)),
-      )
-    }
     const look = { ...plain, ...(plain.svg === undefined ? {} : { isFirstDraw: await firstDraws($, e, active.prefs) }) }
 
     return withSettle(
       $,
       e,
       <Box flexDirection="column">
-        {usageBand(look, meters, !e.props.isWorking && !isCompacting, compact, { isWorking: e.props.isWorking, wait: waitScene }, look.svg !== undefined && (e.props.bodyColumns || 200) < TIGHT_COLUMNS, e.props.bodyColumns || 200)}
+        {usageBand(look, meters, { isWorking: e.props.isWorking, wait: waitScene }, look.svg !== undefined && (e.props.bodyColumns || 200) < TIGHT_COLUMNS, e.props.bodyColumns || 200)}
         {theirs}
       </Box>,
     )

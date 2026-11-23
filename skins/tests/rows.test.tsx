@@ -790,24 +790,11 @@ const BAND = (surface: (typeof SURFACES)[number], isWorking: boolean, columns = 
     props: { hasSurvey: false, isWorking, maxRows: 4, bodyColumns: columns, scroll: { offset: 0, bodyRows: 4 }, view: {} },
   }) as const
 
-test('the band offers Compact, nudges at 70% context, and compacts on a press', async ($, on) => {
-  let compacted = 0
-  const toasts: string[] = []
-  const clock = mock.clock(on, { now: 10_000 })
+test('the band has no Compact button: fast-jev-compaction compacts on its own', async ($, on) => {
+  mock.clock(on, { now: 10_000 })
   on('session.cwd', () => ({ value: '/work' }))
   on('store.get', () => ({ value: undefined }))
-  on('ui.toast', ($, e) => {
-    toasts.push(e.text)
-    return { value: undefined }
-  })
   on('ui.render', () => STOCK)
-  on('command.run', ($, e) => {
-    if (e.command === 'compact') {
-      compacted += 1
-    }
-
-    return {}
-  })
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 85 }, rateLimits: [] } }))
   on('session.start', () => ({ cwd: '/work' }))
   on('command.register', () => ({ value: { command: 'skin' } }))
@@ -815,23 +802,12 @@ test('the band offers Compact, nudges at 70% context, and compacts on a press', 
 
   await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
 
-  const band = await $.ui.mount(BAND('desktop', false))
-  expect(await band.find({ type: 'Text', text: 'Context is 85% full' })).toBeDefined()
-  // The desktop takes clicks, so its red button has no digit hotkey (the terminal keeps one).
-  expect(((await band.find({ key: 'compact' })) as { props: { hotkey?: string } } | undefined)?.props.hotkey).toBeUndefined()
-  await band.press({ key: 'compact' })
-  // It starts on a timer, outside the press, so the press ending cannot cancel it.
-  expect(compacted).toBe(0)
-  // Hidden until that run ends, so more presses cannot queue more runs.
-  expect(await band.find({ key: 'compact' })).toBeUndefined()
-  await clock.advance(1)
-  expect(compacted).toBe(1)
-  expect(await band.find({ key: 'compact' })).toBeDefined()
-  expect(toasts).toEqual([])
-  await band.unmount()
-
-  const busy = await $.ui.mount(BAND('terminal', true))
-  expect(await busy.find({ key: 'compact' })).toBeUndefined()
+  for (const surface of ['desktop', 'terminal'] as const) {
+    const band = await $.ui.mount(BAND(surface, false))
+    expect(await band.find({ key: 'compact' })).toBeUndefined()
+    expect(await band.find({ type: 'Text', text: /Context is 85% full/ })).toBeUndefined()
+    await band.unmount()
+  }
 })
 
 test('cards draw no background of their own', async ($, on) => {
@@ -2014,27 +1990,23 @@ test('the desktop band keeps whatever fits its width: long labels and extra dial
   const drawn = async (columns: number) => {
     const band = await $.ui.mount(BAND('desktop', false, columns))
     const svgs = ((await band.findAll({ type: 'Svg' })) as { props: { source: string; alt: string } }[]).filter(x => x.props.alt !== '')
-    const out = { svgs: svgs.map(x => x.props.source), alts: svgs.map(x => x.props.alt), compact: await band.find({ key: 'compact' }), nudge: await band.find({ type: 'Text', text: 'Context is 85% full' }) }
+    const out = { svgs: svgs.map(x => x.props.source), alts: svgs.map(x => x.props.alt), }
     await band.unmount()
     return out
   }
-  // A wide window (about 1500px): long labels, the nudge, Compact and Clawd.
+  // A wide window (about 1500px): long labels and Clawd.
   const wide = await drawn(200)
   expect(wide.svgs[0]).toContain('context')
-  expect(wide.nudge).toBeDefined()
   expect(wide.alts.some(a => a.startsWith('Clawd'))).toBe(true)
   // Your 715px window, about 89 cells: everything still fits, Clawd included.
   const yours = await drawn(89)
-  expect(yours.compact).toBeDefined()
   expect(yours.alts.length).toBe(2)
   // A narrow band: the 5h dial goes before the animation does.
-  const narrow = await drawn(45)
+  const narrow = await drawn(31)
   expect(narrow.svgs[0]).not.toContain('5h')
   expect(narrow.alts.some(a => a.startsWith('Clawd'))).toBe(true)
-  expect(narrow.compact).toBeDefined()
-  // The narrowest: the context ring alone, its percent inside, and a smaller Compact.
-  const tiny = await drawn(20)
+  // The narrowest: the context ring alone, its percent inside.
+  const tiny = await drawn(12)
   expect(tiny.svgs.length).toBe(1)
   expect(tiny.svgs[0]).toContain('>85<')
-  expect(tiny.compact).toBeDefined()
 })

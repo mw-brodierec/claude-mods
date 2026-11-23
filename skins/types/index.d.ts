@@ -122,7 +122,6 @@ declare module 'claude-code' {
       touched: Record<string, Touch>
       // Per drawing, the keys of the blocks the person unfolded.
       folds: StateFamily<string[]>
-      compacting: boolean
       pinned: boolean
       settle: number
       lastReply: string

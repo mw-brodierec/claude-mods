@@ -1,6 +1,6 @@
 {
   "name": "skins",
-  "version": "0.5.3-marc.9",
+  "version": "0.5.3-marc.10",
   "description": "Skins for Claude Code: tool rows that open onto their input and answer, highlighted code, diff, table, math, Mermaid and shell cards, links, folding, a usage band, a calm mode and fifteen themes. /skin swaps them live. Marc's copy: context/session/weekly dials that tighten in a narrow window, red Compact button, animated Clawd with fifteen wait scenes.",
   "author": {
     "name": "hellosverre",
