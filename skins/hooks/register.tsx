@@ -457,16 +457,23 @@ async function refreshUsage($: EngineInterface): Promise<void> {
   await update($, usageAtom, () => snap)
 }
 
+// Marc: the 5h session window's countdown always shows, on the middle dial; the `countdown`
+// setting adds the rest (the weekly one).
+const shownCountdowns = (isAll: boolean, usage: UsageSnap, now: number): Record<string, string> => {
+  const all = countdownsOf(usage, now)
+  return isAll ? all : Object.fromEntries(Object.entries(all).filter(([label]) => label === 'session'))
+}
+
 // Redraws the band when a countdown it shows would read differently, and not otherwise:
 // a redraw settles the cards still entering first, as a usage change does.
 async function tickCountdowns($: EngineInterface): Promise<void> {
   const prefs = await read($, prefsAtom)
 
-  if (!prefs.countdown || !prefs.band) {
+  if (!prefs.band) {
     return
   }
 
-  const next = countdownsOf(await read($, usageAtom), await $.clock.now())
+  const next = shownCountdowns(prefs.countdown, await read($, usageAtom), await $.clock.now())
 
   if (JSON.stringify(next) === JSON.stringify(await read($, countdownsAtom))) {
     return
@@ -1129,7 +1136,7 @@ reply width: ${lastColumns} columns`
     const usage = await read($, usageAtom)
     // Drawn from the clock so a countdown switched on shows at once; reading the atom
     // redraws the band when the minute tick changes one.
-    const countdowns = active?.prefs.countdown === true ? (await read($, countdownsAtom), countdownsOf(usage, await $.clock.now())) : {}
+    const countdowns = active === null ? {} : (await read($, countdownsAtom), shownCountdowns(active.prefs.countdown, usage, await $.clock.now()))
     const meters = metersOf(usage, countdowns)
 
     if (active === null || !active.prefs.band || e.props.hasSurvey || meters.length === 0) {

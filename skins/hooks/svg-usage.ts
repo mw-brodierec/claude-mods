@@ -83,7 +83,7 @@ export const meterColor = (percent: number, palette: Palette): string =>
 // The short labels a tight band uses, where the window is narrow.
 const SHORT: Record<string, string> = { context: 'ctx', session: '5h', weekly: '7d' }
 
-// `isTight` (a narrow window) keeps the rings and percents, shortens the labels and drops the countdowns.
+// `isTight` (a narrow window) keeps the rings and percents, shortens the labels and drops the countdowns but the session's.
 export function usageSvg(meters: readonly Meter[], palette: Palette, isTight = false, isMinimal = false): { source: string; width: number; height: number; alt: string; entranceMs: number } {
   const alt = meters.map(meter => meter.text ?? `${meter.label} ${meter.percent}%${meter.resets === undefined ? '' : `, resets in ${meter.resets}`}`).join(', ')
   // Marc: the narrowest band keeps only the context ring, its percent inside it.
@@ -101,7 +101,8 @@ export function usageSvg(meters: readonly Meter[], palette: Palette, isTight = f
       entranceMs: FILL_MS,
     }
   }
-  if (isTight) meters = meters.map(meter => ({ label: SHORT[meter.label] ?? meter.label, percent: meter.percent, ...(meter.text === undefined ? {} : { text: meter.text }) }))
+  // Marc: the 5h session countdown stays even here; the measured layout drops dials before it overflows.
+  if (isTight) meters = meters.map(meter => ({ label: SHORT[meter.label] ?? meter.label, percent: meter.percent, ...(meter.text === undefined ? {} : { text: meter.text }), ...(meter.label === 'session' && meter.resets !== undefined ? { resets: meter.resets } : {}) }))
   // A meter with a countdown is wider than the rest; each starts where the one before ended.
   const widths = meters.map(meter =>
     meter.text === undefined ? Math.ceil(RING_R * 2 + 12 + measure(meterText(meter), false, TEXT_SIZE) + GAP) : Math.ceil(measure(meter.text, false, TEXT_SIZE) + GAP),

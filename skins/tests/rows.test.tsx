@@ -1196,15 +1196,28 @@ test('the band holds its rings still while the numbers stay and fills them once 
 
 // The stub clock starts at 10 s; this 5h window resets 100 minutes after that.
 const resetting = { startedAt: 0, context: { window: 200000, percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 18, resetsAt: new Date(10_000 + 100 * 60_000).toISOString() }] }
+const resettingWeekly = { ...resetting, rateLimits: [...resetting.rateLimits, { kind: 'seven_day', percentUsed: 30, resetsAt: new Date(10_000 + 3 * 1440 * 60_000).toISOString() }] }
+
+test('the 5h countdown always shows on the middle dial; countdown on adds the weekly one', async ($, on) => {
+  on('session.usage', () => ({ value: resettingWeekly }))
+  stubEngine(on, { usage: true })
+  await startDesktop($, on)
+
+  const desktop = await $.ui.mount(BAND('desktop', false))
+  const plain = await svgSource(desktop)
+  expect(plain, 'the session countdown shows by default').toContain('session · 1h40')
+  expect(plain, 'the weekly one waits for the setting').not.toContain('weekly · 3d')
+  await desktop.unmount()
+
+  await runSkin($, 'countdown on')
+  const band = await $.ui.mount(BAND('desktop', false))
+  expect(await svgSource(band)).toContain('weekly · 3d0h')
+})
 
 test('with countdown on, the band says when each limit resets, on both surfaces', async ($, on) => {
   on('session.usage', () => ({ value: resetting }))
   stubEngine(on, { usage: true })
   await startDesktop($, on)
-
-  const desktop = await $.ui.mount(BAND('desktop', false))
-  expect(await svgSource(desktop), 'off by default').not.toContain('1h40')
-  await desktop.unmount()
 
   await runSkin($, 'countdown on')
   const band = await $.ui.mount(BAND('desktop', false))

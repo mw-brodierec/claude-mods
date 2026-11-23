@@ -49,6 +49,12 @@ export type AgentRun = {
   /** A background shell task's command line, to tell when it has ended. */
   command?: string
   note?: string
+  /** Marc: a row saved by another session (its CLI id), read from ~/.claude/savvy-progress/agents. */
+  fromSession?: string
+  /** Its cost already counts in its session's own row, so the totals leave it out. */
+  isShadow?: boolean
+  /** Marc: not part of the build (another chat, or another session's agent): hidden unless "Show all chats", never in the totals. */
+  isOutside?: boolean
 }
 
 /** One side session this session started, as hooks/sessions.py reads it. */
@@ -68,6 +74,10 @@ export type SideSession = {
   requests: number
   /** Per model: input, output, cache read, cache write 5m, cache write 1h. */
   models: Record<string, number[]>
+  /** The session's CLI id, which names its saved agent rows. */
+  cli?: string
+  /** Marc: another chat on this machine, active now or lately, not one this session started. */
+  isOther?: boolean
 }
 
 export type Panel = {
@@ -80,6 +90,8 @@ export type Panel = {
   layout?: 'stacked' | 'side'
   // Marc: the agents before the build's jobs (on top, or on the left).
   isAgentsFirst?: boolean
+  /** Marc: other chats on the machine listed too, under their own heading; the totals stay the build's. */
+  isShowingAll?: boolean
 }
 
 export type JobStatus = 'running' | 'waiting' | 'planned' | 'later' | 'shipped'
@@ -114,6 +126,8 @@ export type Build = {
   createdAt: number
   updatedAt: number
   isFinished: boolean
+  /** Marc: CLI ids of the sessions that reported this build (the orchestrators); their agents count as the build's. */
+  orchestrators?: string[]
 }
 
 declare module 'claude-code' {
@@ -125,6 +139,8 @@ declare module 'claude-code' {
       panel: Panel
       now: number
       build: Build | null
+      /** Marc: other sessions' agent rows, re-read from disk on the timer. */
+      fleet: AgentRun[]
     }
   }
 }

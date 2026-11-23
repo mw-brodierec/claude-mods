@@ -80,12 +80,14 @@ function harness(on: Parameters<Parameters<typeof test>[1]>[1]) {
   const priors: string[] = []
   // The command lines `ps` lists, for the background shell rows.
   const procs: string[] = []
+  // What sessions.py lists: side sessions, and with --live other chats on the machine.
+  const side: Record<string, unknown>[] = [SESSION]
   on('process.run', (_, e) => {
     const text = JSON.stringify(e)
     if (text.includes('"ps"')) return { value: { exitCode: 0, stdout: procs.join('\n'), stderr: '' } }
-    return { value: { exitCode: 0, stdout: JSON.stringify(text.includes('--prior') ? priors : [SESSION]), stderr: '' } }
+    return { value: { exitCode: 0, stdout: JSON.stringify(text.includes('--prior') ? priors : side), stderr: '' } }
   })
-  return Object.assign(files, { store, opened, priors, procs, time })
+  return Object.assign(files, { store, opened, priors, procs, time, side })
 }
 
 test('merge upserts by id, stamps updated only on change, and derives the summary', () => {
@@ -139,6 +141,8 @@ test('the jobs tool writes the build file, answers the list, and the pane shows 
 test('the band shows the build and counts live sessions, not in-flight Agent calls', async ($, on) => {
   harness(on)
   await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
+  // The tool refreshes the sessions in the background; a lookup call lets that land first.
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', build: 'Garden planner' })
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
     expect(await ui.find({ type: 'Text', text: /Jobs 1\/5 · 1 running/ })).toBeTruthy()
@@ -304,5 +308,55 @@ test('with session.start skipped (a resume), the first tool call brings the buil
   await $.tool.call({ tool: 'Bash', command: 'git status', description: 'x' })
   await new Promise(r => setTimeout(r, 30))
   expect(await ui.find({ type: 'Text', text: /Garden planner/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+// Marc: a new chat never opens the pane just because some build is unfinished.
+test('a fresh session with an unfinished build keeps the pane shut', async ($, on) => {
+  const files = harness(on)
+  on('session.start', (_, e) => e as never)
+  on('tool.register', (_, e) => ({ value: { tool: `mcp__savvy-progress__${(e as { name: string }).name}` } }))
+  on('command.register', () => ({ value: { command: 'agents-info' } }))
+  files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/garden')))
+  await $.session.start({ source: 'startup', cwd: '/projects/garden' } as never)
+  expect(files.opened).toEqual([])
+})
+
+// Marc: the totals are the build's; other chats and other sessions' agents show only on request.
+test('other chats stay out of the build totals and show only with Show all chats', async ($, on) => {
+  const files = harness(on)
+  // A busy unrelated chat ($20 of output) and an unrelated agent saved by another session ($50).
+  files.side.push({ ...SESSION, id: 'local_x', name: '', title: 'JARVIS sweep', cli: 'cli-x', isOther: true, running: true, models: { 'claude-opus-5-5': [0, 1_000_000, 0, 0, 0] } })
+  const run = { id: 'ag-y', agentId: 'ag-y', type: 'Explore', description: 'Unrelated digging', model: 'claude-opus-5-5', status: 'running', startedAt: files.time.at - 1_000, contextTokens: 0, contextMax: 1e6, tokens: 0, costUsd: 50, steps: 1, round: 1 }
+  files.set('/home/test/.claude/savvy-progress/agents/cli-y.json', JSON.stringify({ savedAt: files.time.at, runs: [run] }))
+  // The build opens the pane and refreshes the chats and other sessions' rows in the background.
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
+  await new Promise(r => setTimeout(r, 30))
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /JARVIS sweep/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Unrelated digging/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /≈\$0\.02 ·/ })).toBeTruthy()
+
+  await ui.press({ key: 'show-all' })
+  expect(await ui.find({ type: 'Text', text: /JARVIS sweep/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /Unrelated digging/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /≈\$0\.02 ·/ }), 'the totals stay the build\'s').toBeTruthy()
+  await ui.unmount()
+})
+
+// Marc: a finished worker sleeps (eyes shut, z's rising); a running one doesn't.
+test('a finished session sleeps on its card and a running one does not', async ($, on) => {
+  const files = harness(on)
+  files.side[0] = { ...SESSION, running: false }
+  files.side.push({ ...SESSION, id: 'local_r', name: 'other-job', title: 'Frost alerts', running: true })
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
+  await new Promise(r => setTimeout(r, 30))
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, bodyColumns: 60 } })
+  const svgs = (await ui.findAll({ type: 'Svg' })) as { props: { alt: string; source: string } }[]
+  const card = (name: string) => svgs.find(x => x.props.alt.startsWith(name))?.props.source ?? ''
+  expect(card('Watering schedule')).toContain('class="s zz"')
+  expect(card('Frost alerts')).not.toContain('class="s zz"')
+  expect(card('Frost alerts')).toContain('class="glive"')
   await ui.unmount()
 })

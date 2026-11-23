@@ -34,6 +34,8 @@ const panel = atom({ plugin: 'savvy-progress', key: 'panel' } as const, {
 const now = atom({ plugin: 'savvy-progress', key: 'now' } as const, 0)
 // Marc: the build this session shows; its truth is the JSON file, re-read on a timer.
 const build = atom({ plugin: 'savvy-progress', key: 'build' } as const, null)
+// Marc: every other session's agent rows, so the pane follows the whole build from any session.
+const fleet = atom({ plugin: 'savvy-progress', key: 'fleet' } as const, [])
 
 const TOOL = 'mcp__savvy-progress__progress'
 const STEP_TOOL = 'mcp__savvy-progress__step'
@@ -100,6 +102,10 @@ const STRINGS = {
     jobsWord: 'Jobs',
     doneWord: 'done',
     noJobs: 'No jobs yet.',
+    otherChat: 'other chat',
+    showAll: 'Show all chats',
+    buildOnly: 'Build only',
+    otherChats: 'Other chats',
   },
   ru: {
     pane: 'Агенты',
@@ -142,6 +148,10 @@ const STRINGS = {
     jobsWord: 'Задачи',
     doneWord: 'готово',
     noJobs: 'Задач пока нет.',
+    otherChat: 'другой чат',
+    showAll: 'Все чаты',
+    buildOnly: 'Только сборка',
+    otherChats: 'Другие чаты',
   },
 } as const
 
@@ -222,9 +232,78 @@ const label = (f: Flow, runs: readonly AgentRun[] = []): string => {
 const ratio = (f: Flow, runs: readonly AgentRun[] = []): number =>
   f.isFinished ? 1 : f.total ? f.done / f.total : runs.length ? (runs.length - liveCount(runs)) / runs.length : 0
 
-// The band's crab; the rest of the row is native elements, so the desktop sizes it.
-const CRAB_W = 26
-const CRAB_H = 22
+// Marc: the band's progress fill, a slow laser from deep to light purple. One wide drawing pinned
+// by its right end inside the fill, so the light head sits at the fill's tip at any width and the
+// body behind it deepens. Two layers of glowing pixels stream toward the head at different slow
+// speeds; each layer repeats every `period` px and moves exactly one period per loop, so it never
+// jumps. Pure CSS motion, which a plain image runs.
+const LASER_W = 1600
+const LASER_H = 18
+const SPARKS_W = 56
+
+// Deterministic scatter: the same drawing on every render, so the source never changes.
+const scatter = (seed: number) => {
+  let x = seed
+  return () => ((x = (x * 1103515245 + 12345) >>> 0) % 10000) / 10000
+}
+
+const pixelLayer = (cls: string, period: number, count: number, seed: number, size: number): string => {
+  const rnd = scatter(seed)
+  const tile = Array.from({ length: count }, () => ({ x: rnd() * period, y: 3 + rnd() * (LASER_H - 6 - size), o: 0.35 + rnd() * 0.65, t: rnd() }))
+  const rects: string[] = []
+  for (let start = -period; start < LASER_W; start += period)
+    for (const p of tile) {
+      // Brighter toward the head, faint in the deep tail.
+      const glow = Math.min(1, 0.25 + ((start + p.x) / LASER_W) * 0.9) * p.o
+      rects.push(`<rect class="${p.t > 0.5 ? 'tw' : 'tw2'}" x="${(start + p.x).toFixed(1)}" y="${p.y.toFixed(1)}" width="${size}" height="${size}" fill="#F3E8FF" opacity="${glow.toFixed(2)}"/>`)
+    }
+  return `<g class="${cls}">${rects.join('')}</g>`
+}
+
+const streaks = (period: number): string => {
+  const out: string[] = []
+  for (let x = -period; x < LASER_W; x += period) out.push(`<rect x="${x}" y="0" width="${period * 0.45}" height="${LASER_H}" fill="url(#w)"/>`)
+  return `<g class="flow">${out.join('')}</g>`
+}
+
+const LASER_BEAM = `<svg xmlns="http://www.w3.org/2000/svg" width="${LASER_W}" height="${LASER_H}" viewBox="0 0 ${LASER_W} ${LASER_H}"><defs>
+<linearGradient id="b" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1E0B4B"/><stop offset=".6" stop-color="#2E1065"/><stop offset=".82" stop-color="#4C1D95"/><stop offset=".93" stop-color="#7C3AED"/><stop offset=".99" stop-color="#C4B5FD"/><stop offset="1" stop-color="#EDE9FE"/></linearGradient>
+<linearGradient id="w" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E9D5FF" stop-opacity="0"/><stop offset=".5" stop-color="#E9D5FF" stop-opacity=".22"/><stop offset="1" stop-color="#E9D5FF" stop-opacity="0"/></linearGradient>
+<linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient>
+<linearGradient id="c" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset=".55" stop-color="#DDD6FE" stop-opacity="0"/><stop offset="1" stop-color="#FAF5FF" stop-opacity=".85"/></linearGradient>
+<radialGradient id="h" cx="1" cy=".5" r="1"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".35" stop-color="#DDD6FE" stop-opacity=".6"/><stop offset="1" stop-color="#A78BFA" stop-opacity="0"/></radialGradient>
+</defs><style>
+.flow{animation:flow 6s linear infinite}@keyframes flow{to{transform:translateX(240px)}}
+.slow{animation:slow 9s linear infinite}@keyframes slow{to{transform:translateX(160px)}}
+.fast{animation:fast 5s linear infinite}@keyframes fast{to{transform:translateX(120px)}}
+.tw{animation:tw 2.8s ease-in-out infinite}.tw2{animation:tw 3.6s ease-in-out infinite -1.4s}@keyframes tw{50%{opacity:.08}}
+.head{animation:head 3.2s ease-in-out infinite}@keyframes head{50%{opacity:.7}}
+@media (prefers-reduced-motion:reduce){.flow,.slow,.fast,.tw,.tw2,.head{animation:none}}
+</style>
+<rect width="${LASER_W}" height="${LASER_H}" fill="url(#b)"/>
+${streaks(240)}
+<rect x="0" y="${LASER_H / 2 - 1}" width="${LASER_W}" height="2" fill="url(#c)"/>
+${pixelLayer('slow', 160, 7, 7, 2)}
+${pixelLayer('fast', 120, 4, 31, 1.5)}
+<rect width="${LASER_W}" height="${LASER_H}" fill="url(#v)"/>
+<rect class="head" x="${LASER_W - 36}" y="0" width="36" height="${LASER_H}" fill="url(#h)"/>
+</svg>`
+
+// What leaves the head: a soft halo past the tip and pixels that drift off and fade.
+const LASER_SPARKS = (() => {
+  const rnd = scatter(5)
+  const sparks = Array.from({ length: 9 }, (_, i) => {
+    const y = 4 + rnd() * (LASER_H - 9)
+    const dy = (rnd() - 0.5) * 8
+    const dur = 2.6 + rnd() * 2
+    return `<rect x="0" y="${y.toFixed(1)}" width="2" height="2" fill="#A78BFA" style="--dy:${dy.toFixed(1)}px;animation:spark ${dur.toFixed(1)}s linear infinite -${((i * dur) / 9).toFixed(2)}s"/>`
+  }).join('')
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${SPARKS_W}" height="${LASER_H}" viewBox="0 0 ${SPARKS_W} ${LASER_H}"><defs><radialGradient id="g" cx="0" cy=".5" r=".5"><stop offset="0" stop-color="#E9D5FF" stop-opacity=".75"/><stop offset=".5" stop-color="#A78BFA" stop-opacity=".25"/><stop offset="1" stop-color="#7C3AED" stop-opacity="0"/></radialGradient></defs><style>
+@keyframes spark{0%{transform:translate(0,0);opacity:0}8%{opacity:.95}100%{transform:translate(${SPARKS_W - 6}px,var(--dy));opacity:0}}
+.halo{animation:halo 3.2s ease-in-out infinite}@keyframes halo{50%{opacity:.55}}
+@media (prefers-reduced-motion:reduce){rect,.halo{animation:none!important}}
+</style><ellipse class="halo" cx="0" cy="${LASER_H / 2}" rx="${SPARKS_W * 0.45}" ry="${LASER_H / 2}" fill="url(#g)"/>${sparks}</svg>`
+})()
 
 const barText = (r: number, width: number): string => {
   const filled = Math.round(width * r)
@@ -368,7 +447,10 @@ async function syncAgents($: EngineInterface, isForced = false): Promise<void> {
     if (list.length === 0) return
     const text = JSON.stringify(list)
     const at = await $.clock.now()
-    if (text === agentsSaved || (!isForced && at - agentsSavedAt < 3_000)) return
+    // A forced save (the 15s timer) rewrites unchanged rows while one runs: the fresh savedAt is the
+    // heartbeat other sessions read to tell a live row from one whose process is gone.
+    const isHeartbeat = isForced && list.some(a => a.status === 'running')
+    if ((text === agentsSaved && !isHeartbeat) || (!isForced && at - agentsSavedAt < 3_000)) return
     agentsSaved = text
     agentsSavedAt = at
     await $.fs.write(file, JSON.stringify({ savedAt: at, runs: list }))
@@ -397,7 +479,9 @@ function startTimers($: EngineInterface): void {
       await ensureBuild($)
       await syncAgents($, true)
       await shellsDone($)
-      if ((await $.ui.panes()).some(p => p.id === PANE) || (await read($, build))) await refreshSessions($)
+      if ((await $.ui.panes()).some(p => p.id === PANE) || (await read($, build))) {
+        await refreshSessions($)
+      }
     })()
   })
 }
@@ -447,9 +531,6 @@ const runLines = (runs: readonly AgentRun[], at: number): RunLine[] =>
 // The coach beside a build's name, running the team.
 const coachBadge = (isWorking: boolean) => ({ svg: crab(0, -1, 'coach', false, isWorking, 1), css: CRAB_CSS, w: 36 })
 
-// The band's crab, alone in a drawing of its own size.
-const bandCrab = (isWorking: boolean): string =>
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${CRAB_W}" height="${CRAB_H}" viewBox="0 0 ${CRAB_W} ${CRAB_H}">${CRAB_CSS}${crab(1, -1, 'coach', false, isWorking, 0.8)}</svg>`
 
 // ---------------------------------------------------------------------------
 // Agents panel: every subagent of the session, plus the tasks the flow planned.
@@ -562,7 +643,8 @@ const sideCost = (models: Record<string, number[]>): number =>
 const taskOf = (f: Flow | null, s: SideSession): PlannedTask | undefined =>
   f?.tasks.find(t => (t.session ? t.session === s.name || t.session === s.id : norm(t.title) === norm(s.title)))
 
-const sideRuns = (list: SideSession[], f: Flow | null): AgentRun[] =>
+// `leads`: the build's orchestrator sessions; another chat that is one of them belongs to the build.
+const sideRuns = (list: SideSession[], f: Flow | null, leads: ReadonlySet<string> = new Set()): AgentRun[] =>
   list.map(s => {
     const task = taskOf(f, s)
     const model = Object.keys(s.models)[0] || s.model
@@ -586,7 +668,9 @@ const sideRuns = (list: SideSession[], f: Flow | null): AgentRun[] =>
       link: s.link,
       name: s.name,
       activeMs: s.activeMs,
-      note: s.running ? undefined : tr().states[s.state],
+      ...(s.isOther && !(s.cli && leads.has(s.cli)) ? { isOutside: true } : {}),
+      // Marc: a chat this session didn't start says so.
+      note: s.isOther ? (s.running ? tr().otherChat : tr().states[s.state] ?? tr().otherChat) : s.running ? undefined : tr().states[s.state],
     }
   })
 
@@ -595,7 +679,7 @@ async function refreshSessions($: EngineInterface): Promise<void> {
     const id = await $.session.id()
     const b = await read($, build)
     const extra = [...new Set((b?.jobs ?? []).flatMap(j => j.sessions).filter(x => x.startsWith('local_')))]
-    const { exitCode, stdout } = await $.process.run(['python3', '-I', `${$.plugin.root}/hooks/sessions.py`, id, ...extra], { timeoutMs: 20_000 })
+    const { exitCode, stdout } = await $.process.run(['python3', '-I', `${$.plugin.root}/hooks/sessions.py`, id, '--live', ...extra], { timeoutMs: 20_000 })
     if (exitCode !== 0) return
     const list = JSON.parse(stdout) as SideSession[]
     const at = await $.clock.now()
@@ -604,17 +688,84 @@ async function refreshSessions($: EngineInterface): Promise<void> {
   } catch {
     // Not on a Mac with the desktop app, or a file mid-write: keep the last read.
   }
+  // Other sessions' agent rows move with the chats: refreshed together, wherever this is called.
+  await refreshFleet($)
 }
 
-const allRuns = async ($: EngineInterface): Promise<AgentRun[]> => [
-  ...(await read($, agents)),
-  ...sideRuns(await read($, sessions), await read($, flow)),
-]
+// This session's rows, its side sessions and other chats, then other sessions' saved rows. A saved
+// row whose session also shows as a chat row is marked a shadow: that row's cost already has it.
+// Marc: only the build's own rows count; everything else is marked outside (shown on request).
+const everyRun = async ($: EngineInterface): Promise<AgentRun[]> => {
+  const side = await read($, sessions)
+  const leads = new Set((await read($, build))?.orchestrators ?? [])
+  const own = [...(await read($, agents)), ...sideRuns(side, await read($, flow), leads)]
+  const seen = new Set(own.map(a => a.id))
+  const counted = new Set(side.map(s => s.cli).filter(Boolean))
+  const others = (await read($, fleet))
+    .filter(a => !seen.has(a.id))
+    .map(a => ({
+      ...a,
+      ...(a.fromSession && counted.has(a.fromSession) ? { isShadow: true } : {}),
+      ...(a.fromSession && leads.has(a.fromSession) ? {} : { isOutside: true }),
+    }))
+  return [...own, ...others]
+}
+
+const allRuns = async ($: EngineInterface): Promise<AgentRun[]> => (await everyRun($)).filter(a => !a.isOutside)
+
+// Marc: other sessions' agent rows, from the files each session saves (syncAgents). Rows from the
+// last FLEET_MS only; a row still "running" in a file not saved for FLEET_STALE_MS lost its process
+// (no heartbeat), so it shows finished at its last save.
+// ponytail: re-reads every file on each 15s tick; fine for dozens, index them if hundreds pile up.
+const FLEET_MS = 12 * 3600_000
+const FLEET_STALE_MS = 60_000
+let mine: string[] | null = null
+async function refreshFleet($: EngineInterface): Promise<void> {
+  try {
+    const id = await $.session.id()
+    mine ??= [id, ...(await priorIds($, id))]
+    const dir = `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/agents`
+    const at = await $.clock.now()
+    const files = (await $.fs.list(dir)).filter(x => x.kind === 'file' && x.name.endsWith('.json') && !mine?.includes(x.name.replace(/\.json$/, '')))
+    const rows: AgentRun[] = []
+    for (const f of files) {
+      let saved: { savedAt?: number; runs?: AgentRun[] }
+      try {
+        saved = JSON.parse(String(await $.fs.read(`${dir}/${f.name}`))) as typeof saved
+      } catch {
+        continue
+      }
+      const savedAt = saved.savedAt ?? 0
+      if (at - savedAt > FLEET_MS || !Array.isArray(saved.runs)) continue
+      const from = f.name.replace(/\.json$/, '')
+      for (const r of saved.runs) {
+        if (!r || typeof r.id !== 'string' || at - r.startedAt > FLEET_MS) continue
+        const isDead = r.status === 'running' && at - savedAt > FLEET_STALE_MS
+        rows.push({ ...r, fromSession: from, ...(isDead ? { status: 'done' as const, endedAt: savedAt } : {}) })
+      }
+    }
+    const next = JSON.stringify(rows)
+    if (next !== JSON.stringify(await read($, fleet))) await update($, fleet, () => rows)
+  } catch {
+    // No folder yet: nothing saved by anyone.
+  }
+}
 
 // Where a press on a row goes: a side session opens in the app, a subagent's transcript in the view.
+// Marc: a chat opens in split view beside this one; the app allows that only for sessions this
+// one started, so anything else (or an older app) falls back to opening it on its own.
 const openRun = async ($: EngineInterface, a: AgentRun): Promise<void> => {
-  if (a.link) await $.process.run(['open', a.link])
-  else if (a.agentId) await $.ui.view({ agentId: a.agentId })
+  if (a.link) {
+    try {
+      const r = await $.mcp.call('ccd_window', 'open_session_in', { session_id: a.id, target: 'split' })
+      const text = r.content.map(c => ('text' in c && typeof c.text === 'string' ? c.text : '')).join(' ')
+      if (!r.isError && /^\s*Opened/.test(text)) return
+    } catch {
+      // No window tools in this session: open it the plain way.
+    }
+    await $.process.run(['open', a.link])
+  }
+  else if (a.agentId && !a.fromSession) await $.ui.view({ agentId: a.agentId })
 }
 
 type Planned = PlannedTask & { n: number }
@@ -625,7 +776,8 @@ const plannedOf = (f: Flow | null, list: AgentRun[]): Planned[] => {
   return (f.tasks ?? []).map((t, i) => ({ ...t, n: i + 1 })).filter(t => !started.has(norm(t.title)))
 }
 
-const totals = (list: AgentRun[], at: number) => {
+const totals = (all: AgentRun[], at: number) => {
+  const list = all.filter(a => !a.isShadow && !a.isOutside)
   const cost = list.reduce((s, a) => s + a.costUsd, 0)
   const tokens = list.reduce((s, a) => s + a.tokens, 0)
   // Cache reads re-count the same context on every request: shown apart, not as new work.
@@ -641,7 +793,9 @@ const PANE_CSS = `<style>
 .t{fill:#1f1f1f}.s{fill:#6b6b68}.m{fill:#9a9a96}.k{fill:#ecebe8}.ln{stroke:#e4e4e1}.tile{fill:#f4f3f0}
 @media (prefers-color-scheme: dark){.t{fill:#ececec}.s{fill:#a8a8a4}.m{fill:#7d7d79}.k{fill:#2c2c2b}.ln{stroke:#333331}.tile{fill:#262625}}
 .live{animation:p 1.6s ease-in-out infinite}@keyframes p{50%{opacity:.3}}
-@media (prefers-reduced-motion: reduce){.live{animation:none}}
+.zz{transform-box:fill-box;opacity:0;animation:zz 3.2s ease-in-out infinite}.zz2{animation-delay:-1.6s}
+@keyframes zz{0%{transform:translate(0,3px);opacity:0}25%{opacity:.85}100%{transform:translate(5px,-7px);opacity:0}}
+@media (prefers-reduced-motion: reduce){.live{animation:none}.zz{animation:none;opacity:.7}}
 </style>`
 
 // Pixel Clawd from DockCrab (Clawdy): a 24×18 crab on a 30×28 grid, one costume per tier.
@@ -799,13 +953,18 @@ const CRAB_SCALE = 1.1
 
 // Body and props nest inside `bd` so a prop rides the bob and adds its own motion;
 // legs stay outside it and step on their own.
-const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE): string => {
+// Marc: `isAsleep`, a finished worker: eyes shut (a line where each eye was).
+const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE, isAsleep = false): string => {
   const groups = new Map<string, string[]>([['bd', []]])
   const f: Fill = (cx, cy, w, h, c, cls = 'bd') => {
     if (!groups.has(cls)) groups.set(cls, [])
     groups.get(cls)?.push(`<rect x="${cx}" y="${cy}" width="${w}" height="${h}" fill="${c}"/>`)
   }
   drawCostume(costume, f)
+  if (isAsleep) {
+    f(9, 12, 2, 2, CLAY); f(19, 12, 2, 2, CLAY)
+    f(9, 13, 2, 1, INK); f(19, 13, 2, 1, INK)
+  }
   const group = (cls: string) => `<g class="${cls}">${(groups.get(cls) ?? []).join('')}</g>`
   const props = [...groups.keys()].filter(k => k !== 'bd' && k !== 'la' && k !== 'lb')
   const body = `<g class="bd">${(groups.get('bd') ?? []).join('')}${props.map(group).join('')}</g>`
@@ -879,18 +1038,24 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const progress = progressOf(a)
   const stats = `ctx ${ctx}% · ${fmtTokens(a.contextTokens)}  ≈${fmtCost(a.costUsd)}  ${fmtTime(elapsed(a, at))}`
   const steps = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' · ' + a.stepNote : ''}` : ''
-  const stepsW = Math.max(0, barW - textWidth(stats, 11) - 12)
+  // Marc: every line starts at the left edge; the steps follow the figures on the same line.
+  const statsW = textWidth(stats, 11)
+  const stepsW = Math.max(0, barW - statsW - 14)
   // Without reported steps the bar falls back to the context, drawn grey.
   const fill = progress ?? ctx / 100
+  const isAsleep = a.status === 'done'
+  const zs = isAsleep
+    ? `<text class="s zz" x="${ox + 27}" y="27" font-family="${FONT}" font-size="8" font-weight="700">z</text><text class="s zz zz2" x="${ox + 32}" y="22" font-family="${FONT}" font-size="10" font-weight="700">z</text>`
+    : ''
   return svg(
     W,
     AGENT_H,
-    `${glassPanel(GI, GI, W - GI * 2, AGENT_H - GI * 2, { tint: color, isQuiet: a.status !== 'running' })}
-${crab(ox, 20, `${costume}#${jerseyOf(a.id)}`, false, a.status === 'running')}
+    `${glassPanel(GI, GI, W - GI * 2, AGENT_H - GI * 2, { tint: color, isQuiet: a.status !== 'running', glow: a.status === 'running' ? 'live' : 'faint' })}
+${crab(ox, 20, `${costume}#${jerseyOf(a.id)}`, false, a.status === 'running', CRAB_SCALE, isAsleep)}${zs}
 <text class="t" x="${tx}" y="${GI + 20}" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
 <text x="${tx}" y="${GI + 36}" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tier)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
-${steps && stepsW > 30 ? `<text class="t" x="${tx}" y="${GI + 51}" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
-<text class="s" x="${tx + barW}" y="${GI + 51}" text-anchor="end" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
+<text class="s" x="${tx}" y="${GI + 51}" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
+${steps && stepsW > 30 ? `<text class="t" x="${tx + statsW + 14}" y="${GI + 51}" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
 ${glassBar(tx, GI + 57, barW, 6, [{ w: Math.round(barW * fill), color: progress === null ? '#9a9a96' : color }])}
 ${statusMark(W - GI - 14, GI + 16, a.status, color)}`,
   )
@@ -931,7 +1096,7 @@ const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnTy
   let used = 0
   const drawn: string[] = []
   for (const [i, ic] of icons.slice(0, fit).entries()) {
-    const one = crab(x0 + i * 36, 5, ic.k, ic.dim, ic.s === 'running') + (ic.s === 'running' && ic.k !== 'coach' ? `<circle class="live" cx="${x0 + i * 36 + 32}" cy="9" r="3" fill="${ic.c}"/>` : '')
+    const one = crab(x0 + i * 36, 5, ic.k, ic.dim, ic.s === 'running', CRAB_SCALE, ic.s === 'done') + (ic.s === 'running' && ic.k !== 'coach' ? `<circle class="live" cx="${x0 + i * 36 + 32}" cy="9" r="3" fill="${ic.c}"/>` : '')
     if (used + one.length > BUDGET) break
     used += one.length
     drawn.push(one)
@@ -1006,7 +1171,11 @@ export const register: Register = (on, options) => {
     await ensureBuild($).catch(() => undefined)
     await syncAgents($)
     lang = await detectLang($, options.language)
-    if ((await openSessions($))[await $.session.id()]) void $.ui.open({ id: PANE, title: tr().pane }).catch(() => undefined)
+    // Marc: the pane comes back only where it was up before (this session, or the ids a restart
+    // gave it), never in a fresh session just because some build is still unfinished.
+    const sid = await $.session.id()
+    const wasOpen = await openSessions($)
+    if (wasOpen[sid] || (await priorIds($, sid)).some(x => wasOpen[x])) void $.ui.open({ id: PANE, title: tr().pane }).catch(() => undefined)
     await $.tool.register({
       name: 'progress',
       description:
@@ -1102,12 +1271,6 @@ export const register: Register = (on, options) => {
       description: 'Show or hide the panel of subagents: running, finished and planned, with model, context, cost and time',
     })
 
-    // A session opened with a build in progress shows it (restored above, before anything that could throw).
-    // Marc: a build still going brings its pane back too, so the first restart after this fix
-    // (nothing remembered yet) and a session whose id changed still show it.
-    const live = await read($, build)
-    if (live && !live.isFinished && live.jobs.length) void $.ui.open({ id: PANE, title: tr().pane }).catch(() => undefined)
-
     startTimers($)
     return started
   })
@@ -1159,6 +1322,8 @@ export const register: Register = (on, options) => {
     const side = await read($, sessions)
     const linked: Build = {
       ...merged,
+      // Marc: the sessions that report the build are its orchestrators; their agents count as its own.
+      orchestrators: [...new Set([...(prev?.orchestrators ?? []), await $.session.id()])],
       jobs: merged.jobs.map(j => ({
         ...j,
         sessions: [...new Set(j.sessions.flatMap(x => [x, ...side.filter(ss => ss.name && ss.name === x).map(ss => ss.id)]))],
@@ -1356,13 +1521,17 @@ export const register: Register = (on, options) => {
     const s = tr()
     const ui = $.ui.resolve(e)
     const { Box, Text, Button, Link } = ui
-    const list = await allRuns($)
+    const wide = await everyRun($)
+    const list = wide.filter(a => !a.isOutside)
+    // Marc: other chats and other sessions' agents, listed only on request and never in the totals.
+    const outside = wide.filter(a => a.isOutside).reverse()
     const f = await read($, flow)
     const b = await read($, build)
     const p: Panel = await read($, panel)
     // A row that leads somewhere carries a press: its session's chat, or a subagent's transcript.
+    // Another session's subagent has no transcript this session can open.
     const opener = (a: AgentRun) =>
-      a.link || a.agentId ? (
+      a.link || (a.agentId && !a.fromSession) ? (
         <Button key={`open-${a.id}`} label={a.link ? s.open : s.view} plain onPress={() => void openRun($, a)} />
       ) : null
     const at = Math.max(await read($, now), ...list.map(a => a.startedAt), 0)
@@ -1382,6 +1551,15 @@ export const register: Register = (on, options) => {
         onPress={() => update($, panel, prev => ({ ...prev, isCompact: !prev.isCompact }))}
       />
     )
+    const toggleAll =
+      outside.length || p.isShowingAll ? (
+        <Button
+          key="show-all"
+          label={p.isShowingAll ? s.buildOnly : `${s.showAll} · ${outside.length}`}
+          plain
+          onPress={() => update($, panel, prev => ({ ...prev, isShowingAll: !prev.isShowingAll }))}
+        />
+      ) : null
     const toggleDone = (
       <Button
         key="done"
@@ -1434,7 +1612,10 @@ export const register: Register = (on, options) => {
       const agentsColumn = (
         <Box key="agents-col" flexDirection="column" gap={1} {...(isWide ? { width: 0, flexGrow: 1, minWidth: 0 } : {})}>
           <Svg source={headerSvg(AW, title, t, running.length > 0)} alt={title ? `${title}: ${summary}` : summary} />
-          {toggleCompact}
+          <Box key="pane-controls" flexDirection="row" columnGap={2}>
+            {toggleCompact}
+            {toggleAll}
+          </Box>
           {isEmpty && <Text dimColor>{s.empty}</Text>}
           {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
           {running.flatMap(a => [
@@ -1451,6 +1632,12 @@ export const register: Register = (on, options) => {
           {planned.map(pl => (
             <Svg key={`plan-${pl.n}`} source={plannedSvg(AW, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} />
           ))}
+          {p.isShowingAll && outside.length > 0 && section('h-other', `${s.otherChats} · ${outside.length}`)}
+          {p.isShowingAll &&
+            outside.flatMap(a => [
+              <Svg key={`o-${a.id}`} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${a.status === 'running' ? s.isRunning : s.isFinished}`} />,
+              opener(a),
+            ])}
         </Box>
       )
       if (!b) return agentsColumn
@@ -1621,6 +1808,9 @@ export const register: Register = (on, options) => {
             {running.map(row)}
             {finished.length > 0 && toggleDone}
             {!p.isDoneCollapsed && finished.map(row)}
+            {toggleAll}
+            {p.isShowingAll && outside.length > 0 && <Text dimColor>{s.otherChats} · {outside.length}</Text>}
+            {p.isShowingAll && outside.map(row)}
             {planned.length > 0 && <Text dimColor>{s.planned} · {planned.length}</Text>}
             {planned.map(pl => {
               const tier = pl.tier in TIER_COLOR ? pl.tier : 'other'
@@ -1657,7 +1847,6 @@ export const register: Register = (on, options) => {
     const list = await allRuns($)
     const live = liveCount(list)
     const crew = list.length + plannedOf(f, list).length
-    const isWorking = live > 0
 
     // A build in progress outranks the flow: the band shows the macro view.
     const bar =
@@ -1707,15 +1896,15 @@ export const register: Register = (on, options) => {
       const titleW = textWidth(`● ${bar.title}`, 14) + 4
       const figureW = textWidth(`${bar.text} · ${percent}`, 14) + 4
       const need = (parts: number[]) => parts.reduce((sum, w) => sum + w, 0) + gap * (parts.length - 1)
-      const hasFigure = need([CRAB_W + 8 + crewW, titleW, 60, figureW, 20]) <= room
-      const hasCoach = hasFigure || need([CRAB_W + 8 + crewW, Math.min(titleW, 80), 60, 20]) <= room
+      // Marc: no coach beside the magnifier; the crew count stands alone.
+      const hasFigure = need([crewW, titleW, 60, figureW, 20]) <= room
+      const pct = Math.round(bar.ratio * 100)
       return (
         <Box key="savvy-glass" position="relative" overflow="hidden" flexDirection="row" alignItems="center" columnGap={2} paddingX={1} borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL}>
           <Box key="sheen" position="absolute" top={0} left={0}>
             <Svg source={GLASS_SHEEN} alt="" width={2400} height={40} />
           </Box>
-          <Box flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
-            {hasCoach ? <Svg source={bandCrab(isWorking)} alt={isWorking ? s.busy : s.done} width={CRAB_W} height={CRAB_H} /> : ''}
+          <Box flexDirection="row" alignItems="center" flexShrink={0}>
             {crewButton}
           </Box>
           <Box flexShrink={1} minWidth={0}>
@@ -1725,8 +1914,25 @@ export const register: Register = (on, options) => {
             </Text>
           </Box>
           <Box flexGrow={1} flexShrink={1} width={0} minWidth={6} alignItems="center">
-            <Box width="100%" height={1} backgroundColor="#80808033">
-              <Box width={`${Math.round(bar.ratio * 100)}%`} height={1} backgroundColor={bar.color} />
+            {/* Marc: the fill is a slow purple laser. Its drawing is pinned by its right end, so the
+                bright head always sits at the fill's tip whatever the band's width; the sparks past
+                the tip live in the empty track beside it. Both sources are constant, so a redraw
+                never restarts the motion. */}
+            <Box key="laser-track" width="100%" height={1} flexDirection="row" backgroundColor="#80808026">
+              <Box key="laser-fill" width={`${pct}%`} height={1} position="relative" overflow="hidden">
+                <Box key="laser-beam" position="absolute" top={0} right={0}>
+                  <Svg key="beam" source={LASER_BEAM} alt="" width={LASER_W} height={LASER_H} />
+                </Box>
+              </Box>
+              {pct > 0 && pct < 100 ? (
+                <Box key="laser-tail" flexGrow={1} height={1} position="relative" overflow="hidden">
+                  <Box key="laser-sparks" position="absolute" top={0} left={0}>
+                    <Svg key="sparks" source={LASER_SPARKS} alt="" width={SPARKS_W} height={LASER_H} />
+                  </Box>
+                </Box>
+              ) : (
+                ''
+              )}
             </Box>
           </Box>
           {hasFigure ? (
@@ -1755,7 +1961,6 @@ export const register: Register = (on, options) => {
         <Text color={bar.color}>{barText(bar.ratio, width)}</Text>
         <Text bold>{bar.text}</Text>
         <Text dimColor>{percent}</Text>
-        <Text color={CLAY}>▣</Text>
         {crewButton}
         {dismiss}
       </Box>

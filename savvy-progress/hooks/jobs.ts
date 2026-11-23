@@ -360,7 +360,7 @@ export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[]
   const H = Math.ceil(y + T.pad + I)
   const isQuiet = j.status === 'planned' || j.status === 'later' || j.status === 'shipped'
   return {
-    source: svg(W, H, glassPanel(I, I, W - I * 2, H - I * 2, { tint: color, isQuiet }) + parts.join('')),
+    source: svg(W, H, glassPanel(I, I, W - I * 2, H - I * 2, { tint: color, isQuiet, glow: isQuiet ? 'faint' : 'live' }) + parts.join('')),
     height: H,
   }
 }
