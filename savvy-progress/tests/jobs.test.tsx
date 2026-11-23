@@ -75,8 +75,10 @@ function harness(on: Parameters<Parameters<typeof test>[1]>[1]) {
   })
   on('ui.panes', () => ({ value: opened.map(id => ({ id })) }))
   on('ui.close', () => ({ value: undefined }))
-  on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify([SESSION]), stderr: '' } }))
-  return Object.assign(files, { store, opened })
+  // The CLI ids this session had before a restart (sessions.py --prior).
+  const priors: string[] = []
+  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: JSON.stringify(JSON.stringify(e).includes('--prior') ? priors : [SESSION]), stderr: '' } }))
+  return Object.assign(files, { store, opened, priors })
 }
 
 test('merge upserts by id, stamps updated only on change, and derives the summary', () => {
@@ -250,4 +252,18 @@ test('agent rows come back after a restart, a row still running then shown as fi
   await ui.unmount()
   const saved = JSON.parse(files.get('/home/test/.claude/savvy-progress/agents/cli-test.json') ?? '{}') as { runs: { id: string; status: string }[] }
   expect(saved.runs.find(r => r.id === 'a2')?.status).toBe('running')
+})
+
+test('after a desktop restart gives the chat a new session id, the rows saved under the old id come back', async ($, on) => {
+  const files = harness(on)
+  on('session.start', (_, e) => e as never)
+  files.priors.push('old-id')
+  const at = Date.UTC(2026, 10, 22, 18)
+  files.set('/home/test/.claude/savvy-progress/agents/cli-test.json', JSON.stringify({ savedAt: at, runs: [] }))
+  files.set('/home/test/.claude/savvy-progress/agents/old-id.json', JSON.stringify({ savedAt: at - 30_000, runs: [{ id: 'w1', agentId: 'w1', type: 'lab-worker', description: 'Gate the market page', model: 'claude-opus-5-5', status: 'running', startedAt: at - 600_000, contextTokens: 0, contextMax: 1_000_000, tokens: 0, costUsd: 0.2, steps: 1, round: 1 }] }))
+  await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never).catch(() => undefined)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await new Promise(r => setTimeout(r, 30))
+  expect(await ui.find({ type: 'Text', text: /Gate the market page/ })).toBeTruthy()
+  await ui.unmount()
 })

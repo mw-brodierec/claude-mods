@@ -316,18 +316,47 @@ async function ensureBuild($: EngineInterface): Promise<void> {
 // /clear resets, so it is also kept in ~/.claude/savvy-progress/agents/<session id>.json and read
 // back when a session shows an empty list. A row still running when it was saved died with the
 // old process, so it comes back finished at the time of the save.
+// The CLI session ids this desktop session had before the current one (sessions.py --prior).
+async function priorIds($: EngineInterface, id: string): Promise<string[]> {
+  try {
+    const { exitCode, stdout } = await $.process.run(['python3', '-I', `${$.plugin.root}/hooks/sessions.py`, '--prior', id], { timeoutMs: 10_000 })
+    const ids: unknown = exitCode === 0 ? JSON.parse(stdout) : []
+    return Array.isArray(ids) ? ids.filter((x): x is string => typeof x === 'string' && /^[\w-]+$/.test(x)) : []
+  } catch {
+    return []
+  }
+}
+
 let agentsLoaded = false
 let agentsSaved = ''
 let agentsSavedAt = 0
 async function syncAgents($: EngineInterface, isForced = false): Promise<void> {
   try {
-    const file = `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/agents/${await $.session.id()}.json`
+    const dir = `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/agents`
+    const id = await $.session.id()
+    const file = `${dir}/${id}.json`
     const list = await read($, agents)
     if (!agentsLoaded) {
       agentsLoaded = true
       if (list.length === 0) {
-        const saved = JSON.parse(String(await $.fs.read(file).catch(() => '{}'))) as { savedAt?: number; runs?: AgentRun[] }
-        const runs = Array.isArray(saved.runs) ? saved.runs.filter(r => r && typeof r.id === 'string') : []
+        // A desktop restart continues the chat under a new CLI session id: fall back to the
+        // rows saved under the ids it had before, newest first.
+        const readRuns = async (path: string): Promise<{ savedAt?: number; runs: AgentRun[] }> => {
+          try {
+            const saved = JSON.parse(String(await $.fs.read(path))) as { savedAt?: number; runs?: AgentRun[] }
+            return { savedAt: saved.savedAt, runs: Array.isArray(saved.runs) ? saved.runs.filter(r => r && typeof r.id === 'string') : [] }
+          } catch {
+            return { runs: [] }
+          }
+        }
+        let saved = await readRuns(file)
+        if (!saved.runs.length) {
+          for (const prior of (await priorIds($, id)).reverse()) {
+            saved = await readRuns(`${dir}/${prior}.json`)
+            if (saved.runs.length) break
+          }
+        }
+        const runs = saved.runs
         if (runs.length) {
           const endedAt = saved.savedAt ?? (await $.clock.now())
           await update($, agents, cur => (cur.length ? cur : runs.map(r => (r.status === 'running' ? { ...r, status: 'done' as const, endedAt } : r))))
@@ -336,6 +365,7 @@ async function syncAgents($: EngineInterface, isForced = false): Promise<void> {
         return
       }
     }
+    if (list.length === 0) return
     const text = JSON.stringify(list)
     const at = await $.clock.now()
     if (text === agentsSaved || (!isForced && at - agentsSavedAt < 3_000)) return
@@ -345,6 +375,30 @@ async function syncAgents($: EngineInterface, isForced = false): Promise<void> {
   } catch {
     // A list that can't be saved still shows; the next draw tries again.
   }
+}
+
+// The clocks: running agents tick every second; every 15s the build, the saved agent rows and the
+// side sessions (other processes) are re-read. Started at session start and, since /resume and a
+// restart can skip that, by the first draw of the pane or band; once per process either way.
+let timersStarted = false
+function startTimers($: EngineInterface): void {
+  if (timersStarted) return
+  timersStarted = true
+  $.clock.every(1000, () => {
+    void (async () => {
+      const list = await read($, agents)
+      if (!list.some(a => a.status === 'running')) return
+      const at = await $.clock.now()
+      await update($, now, () => at)
+    })()
+  })
+  $.clock.every(15_000, () => {
+    void (async () => {
+      await ensureBuild($)
+      await syncAgents($, true)
+      if ((await $.ui.panes()).some(p => p.id === PANE) || (await read($, build))) await refreshSessions($)
+    })()
+  })
 }
 
 // Another session may have written the file: pick its changes up.
@@ -1027,23 +1081,7 @@ export const register: Register = (on, options) => {
     const live = await read($, build)
     if (live && !live.isFinished && live.jobs.length) void $.ui.open({ id: PANE, title: tr().pane }).catch(() => undefined)
 
-    // Ticks the running agents' clocks; quiet when nothing runs.
-    $.clock.every(1000, () => {
-      void (async () => {
-        const list = await read($, agents)
-        if (!list.some(a => a.status === 'running')) return
-        const at = await $.clock.now()
-        await update($, now, () => at)
-      })()
-    })
-    // Side sessions live in other processes: re-read them while the panel is up.
-    $.clock.every(15_000, () => {
-      void (async () => {
-        await ensureBuild($)
-        await syncAgents($, true)
-        if ((await $.ui.panes()).some(p => p.id === PANE) || (await read($, build))) await refreshSessions($)
-      })()
-    })
+    startTimers($)
     return started
   })
 
@@ -1244,6 +1282,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    startTimers($)
     void ensureBuild($).catch(() => undefined)
     void syncAgents($)
     const s = tr()
@@ -1540,6 +1579,7 @@ export const register: Register = (on, options) => {
   // so the desktop lays the row out at whatever width the band really has (it reports the
   // window's width, not the band's, so a drawing sized from it overflowed or left gaps).
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    startTimers($)
     void ensureBuild($).catch(() => undefined)
     void syncAgents($)
     const f = await read($, flow)

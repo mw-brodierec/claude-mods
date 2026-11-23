@@ -1,6 +1,7 @@
 """Side sessions the desktop app started from one session: usage, active time, link.
 
 python3 sessions.py <parent cli session id> [local_… ids]  ->  JSON list on stdout.
+python3 sessions.py --prior <cli session id>  ->  the CLI ids that desktop session had before, oldest first.
 Extra ids are sessions a build's jobs name: listed even when another session started them.
 The desktop app keeps one metadata file per session; each names its CLI
 transcript, whose assistant entries carry the token usage.
@@ -109,5 +110,20 @@ def main(parent_cli, extra=()):
     json.dump(rows, sys.stdout)
 
 
+def prior(cli):
+    for f in glob.glob(os.path.join(APP, '*', '*', 'local_*.json')):
+        text = open(f, errors='replace').read()
+        if cli not in text:
+            continue
+        d = json.loads(text)
+        if d.get('cliSessionId') == cli:
+            json.dump(d.get('priorCliSessionIds') or [], sys.stdout)
+            return
+    json.dump([], sys.stdout)
+
+
 if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else '', sys.argv[2:])
+    if len(sys.argv) > 2 and sys.argv[1] == '--prior':
+        prior(sys.argv[2])
+    else:
+        main(sys.argv[1] if len(sys.argv) > 1 else '', sys.argv[2:])
