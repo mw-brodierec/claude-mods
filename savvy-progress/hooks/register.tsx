@@ -274,16 +274,42 @@ async function loadBuild($: EngineInterface, id: string): Promise<Build | null> 
 const saveBuild = async ($: EngineInterface, b: Build): Promise<void> =>
   $.fs.write(`${await buildsDir($)}/${b.id}.json`, JSON.stringify(b, null, 2) + '\n')
 
-// The newest unfinished build started from this project, for a session opened there later.
+// The build a session should show when it has none: the newest unfinished one started from this
+// project; else one started in a folder above or below it; else (Marc: any session's build shows
+// after a restart) the newest unfinished build touched in the last three days, wherever it began.
+const RECENT_MS = 3 * 24 * 3600_000
 async function latestBuildFor($: EngineInterface, project: string): Promise<Build | null> {
   try {
     const dir = await buildsDir($)
     const names = (await $.fs.list(dir)).filter(x => x.kind === 'file' && x.name.endsWith('.json'))
-    const all = await Promise.all(names.map(x => loadBuild($, x.name.replace(/\.json$/, ''))))
-    return all.filter((b): b is Build => b !== null && !b.isFinished && b.project === project).sort((a, z) => z.updatedAt - a.updatedAt)[0] ?? null
+    const all = (await Promise.all(names.map(x => loadBuild($, x.name.replace(/\.json$/, '')))))
+      .filter((b): b is Build => b !== null && !b.isFinished && b.jobs.length > 0)
+      .sort((a, z) => z.updatedAt - a.updatedAt)
+    const within = (a: string, b: string) => a === b || a.startsWith(`${b.replace(/\/$/, '')}/`)
+    const at = await $.clock.now()
+    return (
+      all.find(b => b.project === project) ??
+      all.find(b => within(project, b.project) || within(b.project, project)) ??
+      all.find(b => at - b.updatedAt < RECENT_MS) ??
+      null
+    )
   } catch {
     return null
   }
+}
+
+// Restores a build into a session that shows none, and otherwise picks up other sessions' changes
+// to it, at most every 15s. Called at start, on every draw of the pane or band and on the timer:
+// /resume, /clear and a restart reset $.state and skip session.start (and with it the timer), so
+// the draws are what bring a resumed session's build back.
+let lastLookup = 0
+async function ensureBuild($: EngineInterface): Promise<void> {
+  const at = await $.clock.now()
+  if (at - lastLookup < 15_000 && lastLookup !== 0) return
+  lastLookup = at
+  if (await read($, build)) return refreshBuild($)
+  const found = await latestBuildFor($, await $.session.root())
+  if (found && !(await read($, build))) await update($, build, () => found)
 }
 
 // Another session may have written the file: pick its changes up.
@@ -860,6 +886,8 @@ async function rememberPane($: EngineInterface, isOpen: boolean): Promise<void> 
 export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    lastLookup = 0
+    await ensureBuild($).catch(() => undefined)
     lang = await detectLang($, options.language)
     if ((await openSessions($))[await $.session.id()]) void $.ui.open({ id: PANE, title: tr().pane }).catch(() => undefined)
     await $.tool.register({
@@ -957,11 +985,7 @@ export const register: Register = (on, options) => {
       description: 'Show or hide the panel of subagents: running, finished and planned, with model, context, cost and time',
     })
 
-    // A session opened in a project with a build in progress shows it.
-    if (!(await read($, build))) {
-      const found = await latestBuildFor($, await $.session.root())
-      if (found) await update($, build, () => found)
-    }
+    // A session opened with a build in progress shows it (restored above, before anything that could throw).
     // Marc: a build still going brings its pane back too, so the first restart after this fix
     // (nothing remembered yet) and a session whose id changed still show it.
     const live = await read($, build)
@@ -979,7 +1003,7 @@ export const register: Register = (on, options) => {
     // Side sessions live in other processes: re-read them while the panel is up.
     $.clock.every(15_000, () => {
       void (async () => {
-        await refreshBuild($)
+        await ensureBuild($)
         if ((await $.ui.panes()).some(p => p.id === PANE) || (await read($, build))) await refreshSessions($)
       })()
     })
@@ -1183,6 +1207,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    void ensureBuild($).catch(() => undefined)
     const s = tr()
     const ui = $.ui.resolve(e)
     const { Box, Text, Button, Link } = ui
@@ -1477,6 +1502,7 @@ export const register: Register = (on, options) => {
   // so the desktop lays the row out at whatever width the band really has (it reports the
   // window's width, not the band's, so a drawing sized from it overflowed or left gaps).
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    void ensureBuild($).catch(() => undefined)
     const f = await read($, flow)
     const b = await read($, build)
     if ((f === null && (b === null || b.isFinished)) || e.props.hasSurvey) return next(e)

@@ -56,6 +56,10 @@ function harness(on: Parameters<Parameters<typeof test>[1]>[1]) {
     const text = files.get((e as { path: string }).path)
     return text === undefined ? { deny: 'missing' } : { value: text }
   })
+  on('fs.list', (_, e) => {
+    const dir = `${(e as { path: string }).path}/`
+    return { value: [...files.keys()].filter(k => k.startsWith(dir)).map(k => ({ name: k.slice(dir.length), path: k, kind: 'file' as const })) }
+  })
   on('session.id', () => ({ value: 'cli-test' }))
   const store = new Map<string, unknown>()
   const opened: string[] = []
@@ -202,4 +206,32 @@ test('a pane left open comes back after a restart, and one closed by hand does n
   opened.length = 0
   await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never)
   expect(opened).toEqual([])
+})
+
+// Marc: after a restart the pane must show the build another session keeps, wherever it was started.
+for (const [what, project] of [['the same project', '/projects/garden'], ['another folder', '/projects/elsewhere']] as const) {
+  test(`after a restart the pane shows a build started in ${what}`, async ($, on) => {
+    const files = harness(on)
+    on('session.start', (_, e) => e as never)
+    on('tool.register', (_, e) => ({ value: { tool: `mcp__savvy-progress__${(e as { name: string }).name}` } }))
+    on('command.register', () => ({ value: { command: 'agents-info' } }))
+    const b = { ...mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), project) }
+    files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(b))
+    await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Garden planner/ })).toBeTruthy()
+    await ui.unmount()
+  })
+}
+
+test('a start hook that fails before the restore still leaves the pane showing the build', async ($, on) => {
+  const files = harness(on)
+  // No registration stubs: the start hook's registrations throw here, as they could in the app.
+  on('session.start', (_, e) => e as never)
+  files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/elsewhere')))
+  await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never).catch(() => undefined)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await new Promise(r => setTimeout(r, 30))
+  expect(await ui.find({ type: 'Text', text: /Garden planner/ })).toBeTruthy()
+  await ui.unmount()
 })
