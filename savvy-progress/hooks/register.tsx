@@ -396,9 +396,36 @@ function startTimers($: EngineInterface): void {
     void (async () => {
       await ensureBuild($)
       await syncAgents($, true)
+      await shellsDone($)
       if ((await $.ui.panes()).some(p => p.id === PANE) || (await read($, build))) await refreshSessions($)
     })()
   })
+}
+
+function kick($: EngineInterface): void {
+  startTimers($)
+  void ensureBuild($).catch(() => undefined)
+  void syncAgents($)
+  void shellsDone($)
+}
+
+// Background shell rows still marked running whose command no process runs any more: finished.
+let lastShellCheck = 0
+async function shellsDone($: EngineInterface): Promise<void> {
+  try {
+    const list = await read($, agents)
+    const open = list.filter(a => a.type === 'shell' && a.status === 'running' && a.command)
+    if (!open.length) return
+    const at = await $.clock.now()
+    if (at - lastShellCheck < 5_000) return
+    lastShellCheck = at
+    const { exitCode, stdout } = await $.process.run(['ps', '-axww', '-o', 'command='], { timeoutMs: 5_000 })
+    if (exitCode !== 0) return
+    const ended = open.filter(a => !stdout.includes(String(a.command).slice(0, 120))).map(a => a.id)
+    if (ended.length) await update($, agents, l => l.map(a => (ended.includes(a.id) ? { ...a, status: 'done' as const, endedAt: at } : a)))
+  } catch {
+    // Checked again on the next tick.
+  }
 }
 
 // Another session may have written the file: pick its changes up.
@@ -1177,6 +1204,50 @@ export const register: Register = (on, options) => {
     }
   })
 
+  // Drawing is pure (the app refuses state writes made while a pane or band draws), and /resume or
+  // a restart can skip session.start. So the restore, the saved rows and the clocks are also kicked
+  // off by every tool call and every prompt: an orchestrator at work calls tools constantly.
+  on('tool.call', async ($, e, next) => {
+    kick($)
+    return next(e)
+  })
+  on('prompt.submit', async ($, e, next) => {
+    kick($)
+    return next(e)
+  })
+
+  // Marc: background shell tasks (a test gate, a deploy) are work too, so they get a row. The row
+  // starts when Bash reports the command went to the background, and ends once no process runs
+  // that command any more (checked every 15s and on each tool call; see shellsDone).
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const answer = await next(e)
+    const taskId = (answer as { result?: { backgroundTaskId?: unknown } }).result?.backgroundTaskId
+    if (typeof taskId !== 'string' || !taskId) return answer
+    const input = e as unknown as { command?: string; description?: string }
+    const at = await $.clock.now()
+    const command = String(input.command ?? '').replace(/\s+/g, ' ').trim()
+    const run: AgentRun = {
+      id: taskId,
+      agentId: taskId,
+      type: 'shell',
+      description: input.description?.trim() || command.slice(0, 60) || 'Background command',
+      model: 'shell',
+      status: 'running',
+      startedAt: at,
+      contextTokens: 0,
+      contextMax: 0,
+      tokens: 0,
+      costUsd: 0,
+      steps: 0,
+      round: 1,
+      stepNote: command.length > 48 ? `${command.slice(0, 47)}…` : command,
+      command: String(input.command ?? '').trim(),
+    }
+    await update($, agents, list => [...list.filter(a => a.id !== taskId), run].slice(-200))
+    await update($, now, () => at)
+    return answer
+  })
+
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
     if (started.deny !== undefined) return started
@@ -1282,9 +1353,6 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    startTimers($)
-    void ensureBuild($).catch(() => undefined)
-    void syncAgents($)
     const s = tr()
     const ui = $.ui.resolve(e)
     const { Box, Text, Button, Link } = ui
@@ -1579,9 +1647,6 @@ export const register: Register = (on, options) => {
   // so the desktop lays the row out at whatever width the band really has (it reports the
   // window's width, not the band's, so a drawing sized from it overflowed or left gaps).
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    startTimers($)
-    void ensureBuild($).catch(() => undefined)
-    void syncAgents($)
     const f = await read($, flow)
     const b = await read($, build)
     if ((f === null && (b === null || b.isFinished)) || e.props.hasSurvey) return next(e)

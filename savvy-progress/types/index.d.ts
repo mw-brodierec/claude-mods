@@ -46,6 +46,8 @@ export type AgentRun = {
   link?: string
   name?: string
   activeMs?: number
+  /** A background shell task's command line, to tell when it has ended. */
+  command?: string
   note?: string
 }
 

@@ -46,7 +46,8 @@ function harness(on: Parameters<Parameters<typeof test>[1]>[1]) {
   const files = new Map<string, string>()
   on('env.get', (_, e) => ({ value: (e as { name: string }).name === 'HOME' ? '/home/test' : undefined }))
   on('session.root', () => ({ value: '/projects/garden' }))
-  on('clock.now', () => ({ value: Date.UTC(2026, 10, 22, 18) }))
+  const time = { at: Date.UTC(2026, 10, 22, 18) }
+  on('clock.now', () => ({ value: time.at }))
   on('fs.write', (_, e) => {
     const { path, text } = e as { path: string; text: string }
     files.set(path, text)
@@ -77,8 +78,14 @@ function harness(on: Parameters<Parameters<typeof test>[1]>[1]) {
   on('ui.close', () => ({ value: undefined }))
   // The CLI ids this session had before a restart (sessions.py --prior).
   const priors: string[] = []
-  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: JSON.stringify(JSON.stringify(e).includes('--prior') ? priors : [SESSION]), stderr: '' } }))
-  return Object.assign(files, { store, opened, priors })
+  // The command lines `ps` lists, for the background shell rows.
+  const procs: string[] = []
+  on('process.run', (_, e) => {
+    const text = JSON.stringify(e)
+    if (text.includes('"ps"')) return { value: { exitCode: 0, stdout: procs.join('\n'), stderr: '' } }
+    return { value: { exitCode: 0, stdout: JSON.stringify(text.includes('--prior') ? priors : [SESSION]), stderr: '' } }
+  })
+  return Object.assign(files, { store, opened, priors, procs, time })
 }
 
 test('merge upserts by id, stamps updated only on change, and derives the summary', () => {
@@ -265,5 +272,37 @@ test('after a desktop restart gives the chat a new session id, the rows saved un
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await new Promise(r => setTimeout(r, 30))
   expect(await ui.find({ type: 'Text', text: /Gate the market page/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('a background shell task gets a row while it runs, and finishes once its process is gone', async ($, on) => {
+  const h = harness(on)
+  on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'bg1' } }))
+  const command = '~/gate.sh ~/repo --push 2>&1 | tail -45'
+  h.procs.push(`/bin/zsh -c eval '${command}'`)
+  await $.tool.call({ tool: 'Bash', command, description: 'Run the test gate on PR 226', run_in_background: true })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Run the test gate on PR 226/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '●' })).toBeTruthy()
+  // Still running at the next tool call; then the process ends and the next check finishes the row.
+  h.time.at += 10_000
+  await $.tool.call({ tool: 'Bash', command: 'true', description: 'x' })
+  expect(await ui.find({ type: 'Text', text: '●' })).toBeTruthy()
+  h.procs.length = 0
+  h.time.at += 10_000
+  await $.tool.call({ tool: 'Bash', command: 'true', description: 'x' })
+  await new Promise(r => setTimeout(r, 30))
+  expect(await ui.find({ type: 'Text', text: '✓' })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('with session.start skipped (a resume), the first tool call brings the build back', async ($, on) => {
+  const files = harness(on)
+  on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false } }))
+  files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/garden')))
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await $.tool.call({ tool: 'Bash', command: 'git status', description: 'x' })
+  await new Promise(r => setTimeout(r, 30))
+  expect(await ui.find({ type: 'Text', text: /Garden planner/ })).toBeTruthy()
   await ui.unmount()
 })
