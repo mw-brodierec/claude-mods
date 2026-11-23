@@ -57,9 +57,22 @@ function harness(on: Parameters<Parameters<typeof test>[1]>[1]) {
     return text === undefined ? { deny: 'missing' } : { value: text }
   })
   on('session.id', () => ({ value: 'cli-test' }))
-  on('ui.open', () => ({ value: { isPlaced: true } }))
+  const store = new Map<string, unknown>()
+  const opened: string[] = []
+  on('store.get', (_, e) => ({ value: store.get((e as { key: string }).key) }))
+  on('store.set', (_, e) => {
+    const { key, value } = e as { key: string; value: unknown }
+    store.set(key, value)
+    return { value: undefined }
+  })
+  on('ui.open', (_, e) => {
+    opened.push((e as { id: string }).id)
+    return { value: { isPlaced: true } }
+  })
+  on('ui.panes', () => ({ value: opened.map(id => ({ id })) }))
+  on('ui.close', () => ({ value: undefined }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: JSON.stringify([SESSION]), stderr: '' } }))
-  return files
+  return Object.assign(files, { store, opened })
 }
 
 test('merge upserts by id, stamps updated only on change, and derives the summary', () => {
@@ -168,4 +181,25 @@ test('the desktop pane lays out by width with only a Swap button, and the band i
   expect(await slim.find({ type: 'Button', key: 'savvy-agents' })).toBeTruthy()
   expect(await slim.find({ type: 'Text', text: 'Garden planner' })).toBeTruthy()
   await slim.unmount()
+})
+
+test('a pane left open comes back after a restart, and one closed by hand does not', async ($, on) => {
+  const { store, opened } = harness(on)
+  on('session.start', (_, e) => e as never)
+  const at = Date.UTC(2026, 10, 22, 18)
+
+  await $.command.run({ command: 'agents-info', args: '' })
+  expect(store.get('open-panes')).toEqual({ 'cli-test': at })
+
+  // A restart: the engine starts the session again with the pane gone.
+  opened.length = 0
+  await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never)
+  expect(opened).toEqual(['savvy-agents'])
+
+  // Closed again: forgotten, so the next start leaves it shut.
+  await $.command.run({ command: 'agents-info', args: '' })
+  expect(store.get('open-panes')).toEqual({})
+  opened.length = 0
+  await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never)
+  expect(opened).toEqual([])
 })

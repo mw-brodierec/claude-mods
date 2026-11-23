@@ -820,11 +820,13 @@ async function togglePane($: EngineInterface): Promise<boolean> {
   const isOpen = (await $.ui.panes()).some(p => p.id === PANE)
   if (isOpen) {
     await $.ui.close({ id: PANE })
+    await rememberPane($, false)
     return false
   }
   const at = await $.clock.now()
   await update($, now, () => at)
   await $.ui.open({ id: PANE, title: tr().pane })
+  await rememberPane($, true)
   void refreshSessions($)
   return true
 }
@@ -833,13 +835,33 @@ async function autoOpen($: EngineInterface, key: string): Promise<void> {
   const p = await read($, panel)
   if (p.autoOpenedFor === key) return
   await update($, panel, prev => ({ ...prev, autoOpenedFor: key }))
+  await rememberPane($, true)
   void $.ui.open({ id: PANE, title: tr().pane }).catch(() => undefined)
+}
+
+// Marc: a pane lives in the running process, so a restart (every plugin update) left the app's
+// tab with nothing behind it: "savvy-progress has not drawn in this pane". The store remembers,
+// per session, that the pane was up, and session.start opens it again.
+const OPEN_KEY = 'open-panes'
+async function openSessions($: EngineInterface): Promise<Record<string, number>> {
+  const v = await $.store.get(OPEN_KEY)
+  return v && typeof v === 'object' ? (v as Record<string, number>) : {}
+}
+async function rememberPane($: EngineInterface, isOpen: boolean): Promise<void> {
+  const id = await $.session.id()
+  const all = await openSessions($)
+  if (isOpen) all[id] = await $.clock.now()
+  else delete all[id]
+  // ponytail: keeps the 50 newest sessions; nothing else reads this list.
+  const kept = Object.fromEntries(Object.entries(all).sort((a, b) => b[1] - a[1]).slice(0, 50))
+  await $.store.set(OPEN_KEY, kept)
 }
 
 export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     lang = await detectLang($, options.language)
+    if ((await openSessions($))[await $.session.id()]) void $.ui.open({ id: PANE, title: tr().pane }).catch(() => undefined)
     await $.tool.register({
       name: 'progress',
       description:
@@ -940,6 +962,10 @@ export const register: Register = (on, options) => {
       const found = await latestBuildFor($, await $.session.root())
       if (found) await update($, build, () => found)
     }
+    // Marc: a build still going brings its pane back too, so the first restart after this fix
+    // (nothing remembered yet) and a session whose id changed still show it.
+    const live = await read($, build)
+    if (live && !live.isFinished && live.jobs.length) void $.ui.open({ id: PANE, title: tr().pane }).catch(() => undefined)
 
     // Ticks the running agents' clocks; quiet when nothing runs.
     $.clock.every(1000, () => {
@@ -958,6 +984,12 @@ export const register: Register = (on, options) => {
       })()
     })
     return started
+  })
+
+  // Closed by its own mark: don't bring it back on the next start. An unload (restart) keeps it.
+  on('ui.close', async ($, e, next) => {
+    if (e.id === PANE && e.origin.kind === 'person') await rememberPane($, false)
+    return next(e)
   })
 
   on('command.run', { command: 'agents-info' }, async $ => {
