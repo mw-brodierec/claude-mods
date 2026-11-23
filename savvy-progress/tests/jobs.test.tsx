@@ -235,3 +235,19 @@ test('a start hook that fails before the restore still leaves the pane showing t
   expect(await ui.find({ type: 'Text', text: /Garden planner/ })).toBeTruthy()
   await ui.unmount()
 })
+
+test('agent rows come back after a restart, a row still running then shown as finished', async ($, on) => {
+  const files = harness(on)
+  on('session.start', (_, e) => e as never)
+  const at = Date.UTC(2026, 10, 22, 18)
+  const run = (id: string, status: 'running' | 'done', description: string) => ({ id, agentId: id, type: 'lab-worker', description, model: 'claude-opus-5-5', status, startedAt: at - 600_000, contextTokens: 1000, contextMax: 1_000_000, tokens: 5000, costUsd: 0.4, steps: 3, round: 1, ...(status === 'done' ? { endedAt: at - 60_000 } : {}) })
+  files.set('/home/test/.claude/savvy-progress/agents/cli-test.json', JSON.stringify({ savedAt: at - 30_000, runs: [run('a1', 'done', 'Merge main into job 9'), run('a2', 'running', 'Job 9b hiring plan')] }))
+  await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never).catch(() => undefined)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await new Promise(r => setTimeout(r, 30))
+  expect(await ui.find({ type: 'Text', text: /Merge main into job 9/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /Job 9b hiring plan/ })).toBeTruthy()
+  await ui.unmount()
+  const saved = JSON.parse(files.get('/home/test/.claude/savvy-progress/agents/cli-test.json') ?? '{}') as { runs: { id: string; status: string }[] }
+  expect(saved.runs.find(r => r.id === 'a2')?.status).toBe('running')
+})

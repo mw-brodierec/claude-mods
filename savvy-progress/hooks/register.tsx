@@ -312,6 +312,41 @@ async function ensureBuild($: EngineInterface): Promise<void> {
   if (found && !(await read($, build))) await update($, build, () => found)
 }
 
+// Marc: the agent rows survive a restart. The list lives in $.state, which a restart, /resume or
+// /clear resets, so it is also kept in ~/.claude/savvy-progress/agents/<session id>.json and read
+// back when a session shows an empty list. A row still running when it was saved died with the
+// old process, so it comes back finished at the time of the save.
+let agentsLoaded = false
+let agentsSaved = ''
+let agentsSavedAt = 0
+async function syncAgents($: EngineInterface, isForced = false): Promise<void> {
+  try {
+    const file = `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/agents/${await $.session.id()}.json`
+    const list = await read($, agents)
+    if (!agentsLoaded) {
+      agentsLoaded = true
+      if (list.length === 0) {
+        const saved = JSON.parse(String(await $.fs.read(file).catch(() => '{}'))) as { savedAt?: number; runs?: AgentRun[] }
+        const runs = Array.isArray(saved.runs) ? saved.runs.filter(r => r && typeof r.id === 'string') : []
+        if (runs.length) {
+          const endedAt = saved.savedAt ?? (await $.clock.now())
+          await update($, agents, cur => (cur.length ? cur : runs.map(r => (r.status === 'running' ? { ...r, status: 'done' as const, endedAt } : r))))
+          agentsSaved = JSON.stringify(await read($, agents))
+        }
+        return
+      }
+    }
+    const text = JSON.stringify(list)
+    const at = await $.clock.now()
+    if (text === agentsSaved || (!isForced && at - agentsSavedAt < 3_000)) return
+    agentsSaved = text
+    agentsSavedAt = at
+    await $.fs.write(file, JSON.stringify({ savedAt: at, runs: list }))
+  } catch {
+    // A list that can't be saved still shows; the next draw tries again.
+  }
+}
+
 // Another session may have written the file: pick its changes up.
 async function refreshBuild($: EngineInterface): Promise<void> {
   const cur = await read($, build)
@@ -888,6 +923,7 @@ export const register: Register = (on, options) => {
     const started = await next(e)
     lastLookup = 0
     await ensureBuild($).catch(() => undefined)
+    await syncAgents($)
     lang = await detectLang($, options.language)
     if ((await openSessions($))[await $.session.id()]) void $.ui.open({ id: PANE, title: tr().pane }).catch(() => undefined)
     await $.tool.register({
@@ -1004,6 +1040,7 @@ export const register: Register = (on, options) => {
     $.clock.every(15_000, () => {
       void (async () => {
         await ensureBuild($)
+        await syncAgents($, true)
         if ((await $.ui.panes()).some(p => p.id === PANE) || (await read($, build))) await refreshSessions($)
       })()
     })
@@ -1208,6 +1245,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     void ensureBuild($).catch(() => undefined)
+    void syncAgents($)
     const s = tr()
     const ui = $.ui.resolve(e)
     const { Box, Text, Button, Link } = ui
@@ -1503,6 +1541,7 @@ export const register: Register = (on, options) => {
   // window's width, not the band's, so a drawing sized from it overflowed or left gaps).
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     void ensureBuild($).catch(() => undefined)
+    void syncAgents($)
     const f = await read($, flow)
     const b = await read($, build)
     if ((f === null && (b === null || b.isFinished)) || e.props.hasSurvey) return next(e)
