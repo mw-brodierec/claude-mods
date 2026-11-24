@@ -33,8 +33,11 @@ export const JOB_THEME = {
 
 // Light first, dark under the media query: the app draws an SVG as an image, which follows the OS.
 export const JOB_CSS = `<style>
-.t{fill:#1f1f1f}.s{fill:#6b6b68}.m{fill:#9a9a96}.k{fill:#ecebe8}.ln{stroke:#e6e5e1}.card{fill:#faf9f7;stroke:#e6e5e1}.tile{fill:#f4f3f0}
-@media (prefers-color-scheme: dark){.t{fill:#ececec}.s{fill:#a8a8a4}.m{fill:#7d7d79}.k{fill:#2c2c2b}.ln{stroke:#333331}.card{fill:#222221;stroke:#333331}.tile{fill:#262625}}
+/* Marc: text never light on light or dark on dark. Each text carries a thin halo in the opposite tone, drawn under its fill, so it reads on any background; on a matching one the halo blends in. */
+.t{fill:#1f1f1f}.s{fill:#5f5f5c}.m{fill:#80807c}.k{fill:#ecebe8}.ln{stroke:#e6e5e1}.card{fill:#faf9f7;stroke:#e6e5e1}.tile{fill:#f4f3f0}
+text{paint-order:stroke;stroke:#ffffff;stroke-opacity:.8;stroke-width:2.4px;stroke-linejoin:round}
+@media (prefers-color-scheme: dark){.t{fill:#ececec}.s{fill:#a8a8a4}.m{fill:#8d8d89}.k{fill:#2c2c2b}.ln{stroke:#333331}.card{fill:#222221;stroke:#333331}.tile{fill:#262625}
+text{stroke:#141413}}
 .live{animation:p 1.6s ease-in-out infinite}@keyframes p{50%{opacity:.3}}
 @media (prefers-reduced-motion: reduce){.live{animation:none}}
 </style>`
@@ -217,6 +220,20 @@ export const summaryLine = (b: Build): string => {
 
 export const labelOf = (b: Build, j: Job): string => j.label || `Job ${b.jobs.indexOf(j) + 1}`
 
+// Marc: what is happening now and what comes next, read from the jobs themselves (a written
+// summary went stale: "13 of 19" under a header counting 16 of 21). Now: the running jobs, else
+// those waiting and on what. Next: the first two planned, else the first two for later.
+export const nowNext = (b: Build): { now: string; next: string } => {
+  const of = (s: JobStatus) => b.jobs.filter(j => j.status === s)
+  const name = (j: Job) => `${labelOf(b, j)} ${j.title}`
+  const running = of('running')
+  const now = running.length
+    ? running.map(name).join(' · ')
+    : of('waiting').map(j => `${name(j)}${j.waitingOn ? ` (waiting on ${j.waitingOn})` : ''}`).join(' · ')
+  const queued = of('planned').length ? of('planned') : of('later')
+  return { now, next: queued.slice(0, 2).map(name).join(' · ') }
+}
+
 // The tool's answer: the whole list back, so a fresh orchestrator can pick the build up.
 export const buildReport = (b: Build): string =>
   [
@@ -258,7 +275,7 @@ export type RunLine = { name: string; state: string; stats: string; status: stri
 
 // The header: build name, derived summary, the orchestrator's own sentence, four tiles, a bar by status.
 // `badge` is an SVG fragment drawn left of the name (the general, from register.tsx), with its CSS.
-export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, string, string, string] }, badge?: { svg: string; css: string; w: number }): Drawn => {
+export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, string, string, string]; now?: string; next?: string }, badge?: { svg: string; css: string; w: number }): Drawn => {
   const T = JOB_THEME
   const c = countJobs(b)
   let y = 0
@@ -269,9 +286,20 @@ export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, str
   parts.push(txt(nx, y, T.size.header, fitText(b.name, T.size.header, W - nx), 'class="t" font-weight="600"'))
   y += 20
   parts.push(txt(0, y, T.size.summary, fitText(summaryLine(b), T.size.summary, W), 'class="t"'))
-  for (const line of b.summary ? wrap(b.summary, T.size.body, W, T.maxLines.summary) : []) {
-    y += T.line.body
-    parts.push(txt(0, y, T.size.body, line, 'class="s"'))
+  const nn = nowNext(b)
+  const rows: [string, string, string][] = [
+    [words.now ?? 'Now', nn.now, T.status.running],
+    [words.next ?? 'Next', nn.next, T.status.planned],
+  ]
+  const keyW = Math.max(...rows.map(([k]) => textWidth(k, T.size.body))) + 10
+  for (const [k, v, color] of rows) {
+    if (!v) continue
+    const lines = wrap(v, T.size.body, W - keyW, 2)
+    lines.forEach((line, i) => {
+      y += T.line.body + (i ? 0 : 2)
+      if (!i) parts.push(txt(0, y, T.size.body, k, `fill="${color}" font-weight="600"`))
+      parts.push(txt(keyW, y, T.size.body, line, 'class="s"'))
+    })
   }
   y += 12
   // Tiles: shipped, running, waiting, to do (planned + later), inset for their shadows.
@@ -303,7 +331,8 @@ export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, str
 }
 
 // One job's card: label and date, title, detail, what it waits on, its PR, its live agents.
-export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[], words: { updated: string; waitingOn: string; more: string }): Drawn => {
+// `linkRoom` (Marc): px left empty at the bottom, where the pane lays the PR link inside the card.
+export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[], words: { updated: string; waitingOn: string; more: string }, linkRoom = 0): Drawn => {
   const T = JOB_THEME
   const color = T.status[j.status]
   const I = GLASS.inset
@@ -357,7 +386,7 @@ export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[]
       parts.push(txt(x0 + 13, y, T.size.agent, `+${runs.length - T.maxAgents} ${words.more}`, 'class="m"'))
     }
   }
-  const H = Math.ceil(y + T.pad + I)
+  const H = Math.ceil(y + T.pad + I + linkRoom)
   const isQuiet = j.status === 'planned' || j.status === 'later' || j.status === 'shipped'
   return {
     source: svg(W, H, glassPanel(I, I, W - I * 2, H - I * 2, { tint: color, isQuiet }) + parts.join('')),

@@ -99,8 +99,12 @@ export const glassBar = (x: number, y: number, w: number, h: number, segments: {
 // transparent but for the tinted edge. The pane stacks it on the card, hidden, and the app's own
 // hover reveals it, so both stay plain images: no interactive frame, so none of its padding gaps.
 export const glowOnly = (W: number, H: number, tint: string, r = GLASS.radius): string => {
+  // Marc: more glow, less stroke. Two blurred rings clipped to the card's own rounded edge, so the
+  // light pours inward from the border and never reaches the drawing's square edge (where it
+  // would be cut off into a rectangle), over a faint hairline on the border itself.
   const x = GLASS.inset
   const w = W - x * 2
   const h = H - x * 2
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs><filter id="hb" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="${GLASS.glowBlur}"/></filter></defs><rect x="${x + 0.5}" y="${x + 0.5}" width="${w - 1}" height="${h - 1}" rx="${r - 0.5}" fill="none" stroke="${tint}" stroke-width="2.6" filter="url(#hb)" opacity=".95"/><rect x="${x + 0.5}" y="${x + 0.5}" width="${w - 1}" height="${h - 1}" rx="${r - 0.5}" fill="none" stroke="${tint}" stroke-width="1.1"/></svg>`
+  const ring = (sw: number, extra: string) => `<rect x="${x}" y="${x}" width="${w}" height="${h}" rx="${r}" fill="none" stroke="${tint}" stroke-width="${sw}" ${extra}/>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs><clipPath id="hc"><rect x="${x}" y="${x}" width="${w}" height="${h}" rx="${r}"/></clipPath><filter id="hw" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="4"/></filter><filter id="hn" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="2"/></filter></defs><g clip-path="url(#hc)">${ring(12, 'filter="url(#hw)" opacity=".65"')}${ring(5, 'filter="url(#hn)" opacity=".75"')}</g>${ring(0.8, 'opacity=".5"')}</svg>`
 }

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { mergeBuild, summaryLine, wrap } from '../hooks/jobs'
+import { mergeBuild, nowNext, summaryLine, wrap } from '../hooks/jobs'
 
 // Invented sample data only: this repository is public.
 const PANE = {
@@ -385,5 +385,37 @@ test('cards glow only on hover, through a hidden layer over a plain image', asyn
   const svgs = (await ui.findAll({ type: 'Svg' })) as { props: { source: string; isInteractive?: boolean } }[]
   expect(svgs.some(x => x.props.isInteractive)).toBe(false)
   expect(svgs.some(x => /class="glive"|class="gfaint"/.test(x.props.source))).toBe(false)
+  await ui.unmount()
+})
+
+// Marc: the header says what is happening now and what is next, from the jobs, not a written summary.
+test('Now and Next come from the jobs: running first, else waiting; then the next planned', () => {
+  const b = mergeBuild(null, SEED, 1_000, '/p')
+  expect(nowNext(b)).toEqual({ now: 'Job 2 Watering schedule', next: 'Job 4 Harvest log' })
+  const idle = mergeBuild(b, { jobs: [{ id: 'water', status: 'shipped' }] }, 2_000, '/p')
+  expect(nowNext(idle).now).toBe('Job 3 Frost alerts (waiting on a weather API key)')
+})
+
+// Marc: a job's PR link sits inside its card, and the pane has a Refresh button that re-reads everything.
+test('the PR link is inside its job card, and Refresh re-reads the pane', async ($, on) => {
+  harness(on)
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
+  await new Promise(r => setTimeout(r, 30))
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, bodyColumns: 60 } })
+  type Node = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
+  const find = (n: unknown, pred: (x: Node) => boolean): Node | undefined => {
+    if (!n || typeof n !== 'object') return undefined
+    if (pred(n as Node)) return n as Node
+    for (const c of (n as Node).children ?? []) {
+      const hit = find(c, pred)
+      if (hit) return hit
+    }
+    return undefined
+  }
+  const card = find(await ui.drawn(), x => x.props?.key === 'job-seeds')
+  expect(find(card, x => x.type === 'Link' && x.props?.href === 'https://example.com/pr/12')).toBeTruthy()
+  expect(await ui.find({ type: 'Button', key: 'refresh' })).toBeTruthy()
+  await ui.press({ key: 'refresh' })
+  expect(await ui.find({ type: 'Button', key: 'refresh' })).toBeTruthy()
   await ui.unmount()
 })

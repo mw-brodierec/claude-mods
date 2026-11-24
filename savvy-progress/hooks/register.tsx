@@ -14,6 +14,7 @@ import {
   jobCardSvg,
   labelOf,
   mergeBuild,
+  nowNext,
   runsOf,
   slug,
   summaryLine,
@@ -102,6 +103,9 @@ const STRINGS = {
     jobsWord: 'Jobs',
     doneWord: 'done',
     noJobs: 'No jobs yet.',
+    nowWord: 'Now',
+    nextWord: 'Next',
+    refresh: '↻ Refresh',
     otherChat: 'other chat',
     showAll: 'Show all chats',
     buildOnly: 'Build only',
@@ -148,6 +152,9 @@ const STRINGS = {
     jobsWord: 'Задачи',
     doneWord: 'готово',
     noJobs: 'Задач пока нет.',
+    nowWord: 'Сейчас',
+    nextWord: 'Дальше',
+    refresh: '↻ Обновить',
     otherChat: 'другой чат',
     showAll: 'Все чаты',
     buildOnly: 'Только сборка',
@@ -335,6 +342,8 @@ const GLASS_SHEEN = `<svg xmlns="http://www.w3.org/2000/svg" width="2400" height
 // The band's bodyColumns counts cells of the app's code font, about 8px; taken a little smaller to stay safe.
 const BAND_CELL_PX = 7.4
 const COL_GAP_PX = 16
+// Px a job card leaves empty at its bottom for the PR link the pane lays there (one row of text).
+const PR_ROOM = 18
 
 const buildsDir = async ($: EngineInterface): Promise<string> => `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/builds`
 
@@ -463,18 +472,22 @@ async function syncAgents($: EngineInterface, isForced = false): Promise<void> {
 // side sessions (other processes) are re-read. Started at session start and, since /resume and a
 // restart can skip that, by the first draw of the pane or band; once per process either way.
 let timersStarted = false
-function startTimers($: EngineInterface): void {
-  if (timersStarted) return
+let timers: { cancel: () => void }[] = []
+// `isRestart` (the Refresh button): drops the running clocks and starts fresh ones.
+function startTimers($: EngineInterface, isRestart = false): void {
+  if (timersStarted && !isRestart) return
+  for (const t of timers) t.cancel()
   timersStarted = true
-  $.clock.every(1000, () => {
+  timers = []
+  timers.push($.clock.every(1000, () => {
     void (async () => {
       const list = await read($, agents)
       if (!list.some(a => a.status === 'running')) return
       const at = await $.clock.now()
       await update($, now, () => at)
     })()
-  })
-  $.clock.every(15_000, () => {
+  }))
+  timers.push($.clock.every(15_000, () => {
     void (async () => {
       await ensureBuild($)
       await syncAgents($, true)
@@ -483,7 +496,21 @@ function startTimers($: EngineInterface): void {
         await refreshSessions($)
       }
     })()
-  })
+  }))
+}
+
+// Marc: the Refresh button. Everything the pane shows is re-read now (the build file, this
+// session's saved rows, the chats, other sessions' rows) and the clocks start over, for when a
+// clock died with its process or the app slept.
+async function refreshNow($: EngineInterface): Promise<void> {
+  lastLookup = 0
+  startTimers($, true)
+  await ensureBuild($)
+  await syncAgents($, true)
+  await shellsDone($)
+  await refreshSessions($)
+  const at = await $.clock.now()
+  await update($, now, () => at)
 }
 
 function kick($: EngineInterface): void {
@@ -798,8 +825,11 @@ const totals = (all: AgentRun[], at: number) => {
 // --- desktop drawings: each row is one SVG, as the band above the prompt is.
 
 const PANE_CSS = `<style>
-.t{fill:#1f1f1f}.s{fill:#6b6b68}.m{fill:#9a9a96}.k{fill:#ecebe8}.ln{stroke:#e4e4e1}.tile{fill:#f4f3f0}
-@media (prefers-color-scheme: dark){.t{fill:#ececec}.s{fill:#a8a8a4}.m{fill:#7d7d79}.k{fill:#2c2c2b}.ln{stroke:#333331}.tile{fill:#262625}}
+/* Marc: text never light on light or dark on dark. Each text carries a thin halo in the opposite tone, drawn under its fill, so it reads on any background; on a matching one the halo blends in. */
+.t{fill:#1f1f1f}.s{fill:#5f5f5c}.m{fill:#80807c}.k{fill:#ecebe8}.ln{stroke:#e4e4e1}.tile{fill:#f4f3f0}
+text{paint-order:stroke;stroke:#ffffff;stroke-opacity:.8;stroke-width:2.4px;stroke-linejoin:round}
+@media (prefers-color-scheme: dark){.t{fill:#ececec}.s{fill:#a8a8a4}.m{fill:#8d8d89}.k{fill:#2c2c2b}.ln{stroke:#333331}.tile{fill:#262625}
+text{stroke:#141413}}
 .live{animation:p 1.6s ease-in-out infinite}@keyframes p{50%{opacity:.3}}
 .zz{transform-box:fill-box;opacity:0;animation:zz 3.2s ease-in-out infinite}.zz2{animation-delay:-1.6s}
 @keyframes zz{0%{transform:translate(0,3px);opacity:0}25%{opacity:.85}100%{transform:translate(3px,-7px);opacity:0}}
@@ -1583,6 +1613,7 @@ export const register: Register = (on, options) => {
           }}
         />
       ) : null
+    const refreshButton = <Button key="refresh" label={s.refresh} plain onPress={() => refreshNow($)} />
     const toggleDone = (
       <Button
         key="done"
@@ -1613,7 +1644,8 @@ export const register: Register = (on, options) => {
       // Marc: a card glows in its colour only under the pointer. The card is keyed, so it is the
       // hover scope; the glow layer on top of it is hidden until then and has no key of its own.
       // The layer spans the card's width, so the app fits both drawings to the same size.
-      const glowCard = (key: string, source: string, alt: string, tint: string) => {
+      // `inside`, drawn last so it stays pressable over the glow: a link laid on the card's bottom.
+      const glowCard = (key: string, source: string, alt: string, tint: string, inside?: ReturnType<typeof prLink>) => {
         const [gw, gh] = sizeOf(source)
         return (
           <Box key={key} position="relative">
@@ -1621,6 +1653,13 @@ export const register: Register = (on, options) => {
             <Box position="absolute" top={0} left={0} width="100%" display="none" hover={{ display: 'flex' }}>
               <Svg source={glowOnly(gw, gh, tint)} alt="" />
             </Box>
+            {inside ? (
+              <Box position="absolute" bottom={0} left={2}>
+                {inside}
+              </Box>
+            ) : (
+              ''
+            )}
           </Box>
         )
       }
@@ -1639,7 +1678,7 @@ export const register: Register = (on, options) => {
         return (
           <Box flexDirection="column" gap={1}>
             {b && (
-              <Svg source={buildHeaderSvg(CW, b, { tiles: s.tiles }, coachBadge(running.length > 0)).source} alt={`${b.name}: ${summaryLine(b)}`} />
+              <Svg source={buildHeaderSvg(CW, b, { tiles: s.tiles, now: s.nowWord, next: s.nextWord }, coachBadge(running.length > 0)).source} alt={`${b.name}: ${summaryLine(b)}`} />
             )}
             <Svg source={compactSvg(AW, list, planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} />
             {toggleCompact}
@@ -1652,6 +1691,7 @@ export const register: Register = (on, options) => {
           <Box key="pane-controls" flexDirection="row" columnGap={2}>
             {toggleCompact}
             {toggleAll}
+            {refreshButton}
           </Box>
           {isEmpty && <Text dimColor>{s.empty}</Text>}
           {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
@@ -1679,13 +1719,11 @@ export const register: Register = (on, options) => {
       )
       if (!b) return agentsColumn
 
-      const header = buildHeaderSvg(CW, b, { tiles: s.tiles }, coachBadge(running.length > 0))
+      const header = buildHeaderSvg(CW, b, { tiles: s.tiles, now: s.nowWord, next: s.nextWord }, coachBadge(running.length > 0))
       const card = (j: Job) => {
-        const drawn = jobCardSvg(CW, b, j, runLines(runsOf(j, list), at), { updated: s.updated, waitingOn: s.waitingOn, more: s.more })
-        return [
-          glowCard(`job-${j.id}`, drawn.source, `${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`, JOB_COLORS[j.status]),
-          prLink(j),
-        ]
+        // Marc: the PR link sits inside its card, in room the drawing leaves at the bottom.
+        const drawn = jobCardSvg(CW, b, j, runLines(runsOf(j, list), at), { updated: s.updated, waitingOn: s.waitingOn, more: s.more }, j.prUrl ? PR_ROOM : 0)
+        return [glowCard(`job-${j.id}`, drawn.source, `${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`, JOB_COLORS[j.status], prLink(j))]
       }
       const jobsColumn = (
         <Box key="jobs-col" flexDirection="column" gap={1} {...(isWide ? { width: 0, flexGrow: 1, minWidth: 0 } : {})}>
@@ -1798,7 +1836,18 @@ export const register: Register = (on, options) => {
               {b.name}
             </Text>
             <Text wrap="truncate-end">{summaryLine(b)}</Text>
-            {b.summary && <Text dimColor>{b.summary}</Text>}
+            {nowNext(b).now && (
+              <Text wrap="truncate-end">
+                <Text color={JOB_COLORS.running}>{s.nowWord} </Text>
+                <Text dimColor>{nowNext(b).now}</Text>
+              </Text>
+            )}
+            {nowNext(b).next && (
+              <Text wrap="truncate-end">
+                <Text color={JOB_COLORS.planned}>{s.nextWord} </Text>
+                <Text dimColor>{nowNext(b).next}</Text>
+              </Text>
+            )}
             <Text wrap="truncate-end">
               {GROUPS.map(g => (
                 <Text key={`bar-${g}`} color={JOB_COLORS[g]}>
@@ -1846,6 +1895,7 @@ export const register: Register = (on, options) => {
             {finished.length > 0 && toggleDone}
             {!p.isDoneCollapsed && finished.map(row)}
             {toggleAll}
+            {refreshButton}
             {p.isShowingAll && outside.length > 0 && <Text dimColor>{s.otherChats} · {outside.length}</Text>}
             {p.isShowingAll && outside.map(row)}
             {planned.length > 0 && <Text dimColor>{s.planned} · {planned.length}</Text>}
