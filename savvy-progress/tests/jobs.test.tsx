@@ -75,7 +75,13 @@ function harness(on: Parameters<Parameters<typeof test>[1]>[1]) {
     return { value: { isPlaced: true } }
   })
   on('ui.panes', () => ({ value: opened.map(id => ({ id })) }))
-  on('ui.close', () => ({ value: undefined }))
+  const closed: string[] = []
+  on('ui.close', (_, e) => {
+    closed.push((e as { id: string }).id)
+    const at = opened.indexOf((e as { id: string }).id)
+    if (at >= 0) opened.splice(at, 1)
+    return { value: undefined }
+  })
   // The CLI ids this session had before a restart (sessions.py --prior).
   const priors: string[] = []
   // The command lines `ps` lists, for the background shell rows.
@@ -87,7 +93,7 @@ function harness(on: Parameters<Parameters<typeof test>[1]>[1]) {
     if (text.includes('"ps"')) return { value: { exitCode: 0, stdout: procs.join('\n'), stderr: '' } }
     return { value: { exitCode: 0, stdout: JSON.stringify(text.includes('--prior') ? priors : side), stderr: '' } }
   })
-  return Object.assign(files, { store, opened, priors, procs, time, side })
+  return Object.assign(files, { store, opened, closed, priors, procs, time, side })
 }
 
 test('merge upserts by id, stamps updated only on change, and derives the summary', () => {
@@ -428,4 +434,17 @@ test('the PR link is inside its job card, and Refresh re-reads the pane', async 
   await ui.press({ key: 'refresh' })
   expect(await ui.find({ type: 'Button', key: 'refresh' })).toBeTruthy()
   await ui.unmount()
+})
+
+// Marc: after /reload-plugins the pane stayed the old copy's (dead buttons) or "has not drawn". The
+// band's ↻ (always drawn) closes the pane and opens it again, so this copy draws it fresh.
+test('the band refresh reopens the pane fresh and re-reads everything', async ($, on) => {
+  const files = harness(on)
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
+  expect(files.opened).toContain('savvy-agents')
+  const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await band.press({ key: 'savvy-refresh' })
+  expect(files.closed).toContain('savvy-agents')
+  expect(files.opened).toContain('savvy-agents')
+  await band.unmount()
 })

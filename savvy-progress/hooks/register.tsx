@@ -453,6 +453,15 @@ function startTimers($: EngineInterface, isRestart = false): void {
 // Marc: the Refresh button. Everything the pane shows is re-read now (the build file, this
 // session's saved rows, the chats, other sessions' rows) and the clocks start over, for when a
 // clock died with its process or the app slept.
+// Marc: after /reload-plugins the app kept the old copy's pane (its buttons dead) or showed "has
+// not drawn in this pane": opening a pane the app already shows asked for no new drawing. Closing
+// it first makes this copy draw it fresh. Used at start and by the band's ↻ button.
+async function reopenPane($: EngineInterface): Promise<void> {
+  if ((await $.ui.panes()).some(p => p.id === PANE)) await $.ui.close({ id: PANE }).catch(() => undefined)
+  await $.ui.open({ id: PANE, title: tr().pane })
+  await rememberPane($, true)
+}
+
 async function refreshNow($: EngineInterface): Promise<void> {
   lastLookup = 0
   startTimers($, true)
@@ -1182,7 +1191,7 @@ export const register: Register = (on, options) => {
     // gave it), never in a fresh session just because some build is still unfinished.
     const sid = await $.session.id()
     const wasOpen = await openSessions($)
-    if (wasOpen[sid] || (await priorIds($, sid)).some(x => wasOpen[x])) void $.ui.open({ id: PANE, title: tr().pane }).catch(() => undefined)
+    if (wasOpen[sid] || (await priorIds($, sid)).some(x => wasOpen[x])) void reopenPane($).catch(() => undefined)
     await $.tool.register({
       name: 'progress',
       description:
@@ -1950,6 +1959,19 @@ export const register: Register = (on, options) => {
 
     // Marc: the magnifier says the count opens the agents panel.
     const crewButton = <Button key="savvy-agents" label={`🔍 ×${crew}`} plain onPress={() => void togglePane($)} />
+    // Marc: refresh where it always works: the band draws even when the pane doesn't. It reopens the
+    // pane drawn fresh by this copy of the mod and re-reads everything.
+    const bandRefresh = (
+      <Button
+        key="savvy-refresh"
+        label="↻"
+        plain
+        onPress={async () => {
+          await reopenPane($)
+          await refreshNow($)
+        }}
+      />
+    )
     const dismiss = (
       <Button
         key="savvy-dismiss"
@@ -1972,7 +1994,7 @@ export const register: Register = (on, options) => {
       // figures, then without the coach; the title truncates and the bar keeps at least 60px.
       const room = (e.props.bodyColumns || 200) * BAND_CELL_PX - 20
       const gap = 16
-      const crewW = textWidth(`🔍 ×${crew}`, 14) + 8
+      const crewW = textWidth(`🔍 ×${crew}`, 14) + 8 + textWidth("↻", 14) + 16
       const titleW = textWidth(`● ${bar.title}`, 14) + 4
       const figureW = textWidth(`${bar.text} · ${percent}`, 14) + 4
       const need = (parts: number[]) => parts.reduce((sum, w) => sum + w, 0) + gap * (parts.length - 1)
@@ -1984,8 +2006,9 @@ export const register: Register = (on, options) => {
           <Box key="sheen" position="absolute" top={0} left={0} width={WIDE_CELLS}>
             <Svg source={GLASS_SHEEN} alt="" width={2400} height={40} />
           </Box>
-          <Box flexDirection="row" alignItems="center" flexShrink={0}>
+          <Box flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
             {crewButton}
+            {bandRefresh}
           </Box>
           <Box flexShrink={1} minWidth={0}>
             <Text wrap="truncate-end">
@@ -2034,6 +2057,7 @@ export const register: Register = (on, options) => {
         <Text bold>{bar.text}</Text>
         <Text dimColor>{percent}</Text>
         {crewButton}
+        {bandRefresh}
         {dismiss}
       </Box>
     )
