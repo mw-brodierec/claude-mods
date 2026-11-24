@@ -109,7 +109,8 @@ const STRINGS = {
     refresh: 'Refresh',
     otherChat: 'other chat',
     showAll: 'All chats',
-    buildOnly: 'Build only',
+    allShort: 'All',
+    buildOnly: 'Build',
     otherChats: 'Other chats',
   },
   ru: {
@@ -158,6 +159,7 @@ const STRINGS = {
     refresh: 'Обновить',
     otherChat: 'другой чат',
     showAll: 'Все чаты',
+    allShort: 'Все',
     buildOnly: 'Только сборка',
     otherChats: 'Другие чаты',
   },
@@ -240,80 +242,13 @@ const label = (f: Flow, runs: readonly AgentRun[] = []): string => {
 const ratio = (f: Flow, runs: readonly AgentRun[] = []): number =>
   f.isFinished ? 1 : f.total ? f.done / f.total : runs.length ? (runs.length - liveCount(runs)) / runs.length : 0
 
-// Marc: the band's progress fill, a slow laser from deep to light purple. One wide drawing pinned
-// by its right end inside the fill, so the light head sits at the fill's tip at any width and the
-// body behind it deepens. Two layers of glowing pixels stream toward the head at different slow
-// speeds; each layer repeats every `period` px and moves exactly one period per loop, so it never
-// jumps. Pure CSS motion, which a plain image runs.
-const LASER_W = 1600
-const LASER_H = 18
-const SPARKS_W = 56
+// Marc: the band's fill as native slices, deep purple to light, the last the brightest tip.
+const LASER_STEPS = ((from: number[], to: number[], n: number) =>
+  Array.from({ length: n }, (_, i) => {
+    const t = Math.pow(i / (n - 1), 1.3)
+    return `#${from.map((f, k) => Math.round(f + ((to[k] ?? f) - f) * t).toString(16).padStart(2, '0')).join('')}`
+  }))([0x3b, 0x0f, 0x8c], [0xc4, 0xb5, 0xfd], 14)
 
-// Deterministic scatter: the same drawing on every render, so the source never changes.
-const scatter = (seed: number) => {
-  let x = seed
-  return () => ((x = (x * 1103515245 + 12345) >>> 0) % 10000) / 10000
-}
-
-const pixelLayer = (cls: string, period: number, count: number, seed: number, size: number): string => {
-  const rnd = scatter(seed)
-  const tile = Array.from({ length: count }, () => ({ x: rnd() * period, y: 3 + rnd() * (LASER_H - 6 - size), o: 0.35 + rnd() * 0.65, t: rnd() }))
-  const rects: string[] = []
-  for (let start = -period; start < LASER_W; start += period)
-    for (const p of tile) {
-      // Brighter toward the head, faint in the deep tail.
-      const glow = Math.min(1, 0.25 + ((start + p.x) / LASER_W) * 0.9) * p.o
-      rects.push(`<rect class="${p.t > 0.5 ? 'tw' : 'tw2'}" x="${(start + p.x).toFixed(1)}" y="${p.y.toFixed(1)}" width="${size}" height="${size}" fill="#F3E8FF" opacity="${glow.toFixed(2)}"/>`)
-    }
-  return `<g class="${cls}">${rects.join('')}</g>`
-}
-
-const streaks = (period: number): string => {
-  const out: string[] = []
-  for (let x = -period; x < LASER_W; x += period) out.push(`<rect x="${x}" y="0" width="${period * 0.45}" height="${LASER_H}" fill="url(#w)"/>`)
-  return `<g class="flow">${out.join('')}</g>`
-}
-
-const LASER_BEAM = `<svg xmlns="http://www.w3.org/2000/svg" width="${LASER_W}" height="${LASER_H}" viewBox="0 0 ${LASER_W} ${LASER_H}"><defs>
-<linearGradient id="b" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#2E1065"/><stop offset=".12" stop-color="#4C1D95"/><stop offset=".3" stop-color="#7C3AED"/><stop offset=".55" stop-color="#9F7AEA"/><stop offset="1" stop-color="#A78BFA"/></linearGradient>
-<linearGradient id="w" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E9D5FF" stop-opacity="0"/><stop offset=".5" stop-color="#E9D5FF" stop-opacity=".22"/><stop offset="1" stop-color="#E9D5FF" stop-opacity="0"/></linearGradient>
-<linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".45"/><stop offset=".3" stop-color="#000" stop-opacity="0"/><stop offset=".7" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>
-<filter id="cb" x="-1%" y="-100%" width="102%" height="300%"><feGaussianBlur stdDeviation="1.6"/></filter>
-<linearGradient id="c" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F5F3FF" stop-opacity=".4"/><stop offset=".25" stop-color="#FAF5FF" stop-opacity=".85"/><stop offset="1" stop-color="#FFFFFF" stop-opacity=".9"/></linearGradient>
-<radialGradient id="h" cx="1" cy=".5" r="1"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".35" stop-color="#DDD6FE" stop-opacity=".6"/><stop offset="1" stop-color="#A78BFA" stop-opacity="0"/></radialGradient>
-</defs><style>
-.flow{animation:flow 6s linear infinite}@keyframes flow{to{transform:translateX(240px)}}
-.slow{animation:slow 9s linear infinite}@keyframes slow{to{transform:translateX(160px)}}
-.fast{animation:fast 5s linear infinite}@keyframes fast{to{transform:translateX(120px)}}
-.tw{animation:tw 2.8s ease-in-out infinite}.tw2{animation:tw 3.6s ease-in-out infinite -1.4s}@keyframes tw{50%{opacity:.08}}
-.head{animation:head 3.2s ease-in-out infinite}@keyframes head{50%{opacity:.7}}
-.hum{animation:hum 2.4s ease-in-out infinite}@keyframes hum{50%{opacity:.3}}
-@media (prefers-reduced-motion:reduce){.flow,.slow,.fast,.tw,.tw2,.head,.hum{animation:none}}
-</style>
-<rect width="${LASER_W}" height="${LASER_H}" fill="url(#b)"/>
-${streaks(240)}
-<rect width="${LASER_W}" height="${LASER_H}" fill="url(#v)"/>
-<rect class="hum" x="0" y="${LASER_H / 2 - 4}" width="${LASER_W}" height="8" rx="4" fill="url(#c)" filter="url(#cb)" opacity=".4"/>
-<rect x="0" y="${LASER_H / 2 - 1.5}" width="${LASER_W}" height="3" rx="1.5" fill="url(#c)"/>
-${pixelLayer('slow', 160, 7, 7, 2)}
-${pixelLayer('fast', 120, 4, 31, 1.5)}
-</svg>`
-
-// What leaves the head: a soft halo past the tip and pixels that drift off and fade.
-const LASER_SPARKS = (() => {
-  const rnd = scatter(5)
-  const sparks = Array.from({ length: 9 }, (_, i) => {
-    const y = 4 + rnd() * (LASER_H - 9)
-    const dy = (rnd() - 0.5) * 8
-    const dur = 2.6 + rnd() * 2
-    return `<rect x="0" y="${y.toFixed(1)}" width="2" height="2" fill="#A78BFA" style="--dy:${dy.toFixed(1)}px;animation:spark ${dur.toFixed(1)}s linear infinite -${((i * dur) / 9).toFixed(2)}s"/>`
-  }).join('')
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${SPARKS_W}" height="${LASER_H}" viewBox="0 0 ${SPARKS_W} ${LASER_H}"><defs><radialGradient id="g" cx="0" cy=".5" r=".5"><stop offset="0" stop-color="#E9D5FF" stop-opacity=".75"/><stop offset=".5" stop-color="#A78BFA" stop-opacity=".25"/><stop offset="1" stop-color="#7C3AED" stop-opacity="0"/></radialGradient></defs><style>
-@keyframes spark{0%{transform:translate(0,0);opacity:0}8%{opacity:.95}100%{transform:translate(${SPARKS_W - 6}px,var(--dy));opacity:0}}
-.halo{animation:halo 3.2s ease-in-out infinite}@keyframes halo{50%{opacity:.55}}
-@media (prefers-reduced-motion:reduce){rect,.halo{animation:none!important}}
-</style><ellipse class="halo" cx="0" cy="${LASER_H / 2}" rx="${SPARKS_W * 0.4}" ry="${LASER_H / 2}" fill="url(#g)"/><ellipse cx="0" cy="${LASER_H / 2}" rx="4" ry="2.2" fill="#FFFFFF" opacity=".9"/>${sparks}</svg>`
-})()
 
 const barText = (r: number, width: number): string => {
   const filled = Math.round(width * r)
@@ -1622,9 +1557,13 @@ export const register: Register = (on, options) => {
 
     // Marc: the controls stay on one line: icon and word while all four fit, the icons alone when the
     // pane is too narrow. App text has one size here (the pane refuses Text `size`), so width decides.
-    const controlWords = [s.collapse, s.showAll, s.refresh, b ? 'Swap' : ''].join('').length
-    const isIconOnly = (e.props.bodyColumns || 40) < controlWords + 4 * 4 + 8
-    const iconLabel = (icon: string, word: string) => (isIconOnly ? icon : `${icon} ${word}`)
+    // Labels are proportional text, about 0.8 of a cell a character, two cells between controls.
+    // The fullest set that fits: every word; then Collapse as its icon alone; then icons only.
+    const paneCols = e.props.bodyColumns || 40
+    const fits = (words: string[]) => words.join('').length * 0.8 + words.length * 2 + 3 * 2 + 2 <= paneCols
+    const all = [b ? 'Swap' : '', s.collapse, s.allShort, s.refresh].filter(Boolean)
+    const dropped = fits(all) ? new Set<string>() : fits(all.filter(w => w !== s.collapse && w !== s.expand)) ? new Set([s.collapse, s.expand]) : new Set(all.concat(s.expand, s.buildOnly))
+    const iconLabel = (icon: string, word: string) => (dropped.has(word) ? icon : `${icon} ${word}`)
     const toggleCompact = (
       <Button key="compact" label={iconLabel(p.isCompact ? '⊞' : '⊟', p.isCompact ? s.expand : s.collapse)} plain onPress={() => update($, panel, prev => ({ ...prev, isCompact: !prev.isCompact }))} />
     )
@@ -1632,7 +1571,7 @@ export const register: Register = (on, options) => {
       outside.length || p.isShowingAll ? (
         <Button
           key="show-all"
-          label={p.isShowingAll ? iconLabel('◉', s.buildOnly) : `${iconLabel('◎', s.showAll)} · ${outside.length}`}
+          label={p.isShowingAll ? iconLabel('◉', s.buildOnly) : `${iconLabel('◎', s.allShort)} ${outside.length}`}
           plain
           onPress={async () => {
             await update($, panel, prev => ({ ...prev, isShowingAll: !prev.isShowingAll }))
@@ -2059,26 +1998,13 @@ export const register: Register = (on, options) => {
                 bright head always sits at the fill's tip whatever the band's width; the sparks past
                 the tip live in the empty track beside it. Both sources are constant, so a redraw
                 never restarts the motion. */}
+            {/* Marc (seen in captures of the app): no drawing ever painted inside the band's bar, so the
+                fill is the app's own boxes: LASER_STEPS slices stepping from deep purple on the left to
+                light at the tip, always drawn. A finished build is one solid colour. */}
             <Box key="laser-track" width="100%" height={1} flexDirection="row" backgroundColor="#80808026">
-              {/* Marc (seen in a capture of the app): it ignores an absolute `right` offset and squeezes a
-                  drawing placed in the flow to the box's width. Absolute at top/left with its own size,
-                  as the sheen is, is what it draws as made: so the beam runs from the fill's left,
-                  clipped at its end, and the bright tip lives in the strip just past the fill. The
-                  bar's own colour lies underneath, so the fill shows even if the drawing doesn't. */}
-              <Box key="laser-fill" width={`${pct}%`} minWidth={0} height={1} position="relative" overflow="hidden" backgroundColor={bar.color}>
-                <Box key="laser-beam" position="absolute" top={0} left={0} width={WIDE_CELLS}>
-                  <Svg key="beam" source={LASER_BEAM} alt="" width={LASER_W} height={LASER_H} />
-                </Box>
+              <Box key="laser-fill" width={`${pct}%`} minWidth={0} height={1} flexDirection="row" overflow="hidden" backgroundColor={bar.color}>
+                {bar.color === ACCENT ? LASER_STEPS.map((c, i) => <Box key={`ls-${i}`} flexGrow={1} flexShrink={1} minWidth={0} height={1} backgroundColor={c} />) : ''}
               </Box>
-              {pct > 0 && pct < 100 ? (
-                <Box key="laser-tail" flexGrow={1} height={1} position="relative" overflow="hidden">
-                  <Box key="laser-sparks" position="absolute" top={0} left={0} width={8}>
-                    <Svg key="sparks" source={LASER_SPARKS} alt="" width={SPARKS_W} height={LASER_H} />
-                  </Box>
-                </Box>
-              ) : (
-                ''
-              )}
             </Box>
           </Box>
           {hasFigure ? (

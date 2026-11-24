@@ -24,11 +24,13 @@ export const JOB_THEME = {
   failed: '#D0453F',
   pad: 12,
   // Marc: sizes close to the app's own text (a PR link beside them reads the same size).
-  size: { label: 12, title: 16, body: 14, agent: 13, header: 16, summary: 13.5, tileKey: 12.5, tileValue: 20 },
-  line: { title: 21, body: 19, agent: 20 },
+  // Marc: the build header is a main section: a large name, roomy lines, big tile numbers.
+  // `label` is a job card's "JOB 6"; `pr` its PR numbers, kept small.
+  size: { label: 14, title: 16, body: 14, agent: 13, header: 21, summary: 15, now: 15, tileKey: 13, tileValue: 30, pr: 12 },
+  line: { title: 21, body: 19, agent: 20, now: 21 },
   maxLines: { title: 2, detail: 3, waiting: 2, summary: 3 },
   maxAgents: 4,
-  tileH: 58,
+  tileH: 72,
   barH: 10,
 }
 
@@ -229,11 +231,13 @@ export const labelOf = (b: Build, j: Job): string => j.label || `Job ${b.jobs.in
 // link text has one fixed size, larger than the card's). The pane puts a ↗ link beside it.
 // `scale` makes up for the card body being drawn wider than its column and shrunk to fit.
 export const prLineSvg = (text: string, maxW: number, scale: number): Drawn => {
-  const size = JOB_THEME.size.body * scale
-  const shown = fitText(text, size, maxW)
-  const W = Math.ceil(textWidth(shown, size) + 2)
-  const H = Math.ceil(size * 1.45)
-  return { source: svg(W, H, txt(0, Math.round(size * 1.1), size, shown, 'class="lk" font-weight="500"')), height: H }
+  const size = JOB_THEME.size.pr * scale
+  // A long list wraps to a second line rather than being cut.
+  const lines = wrap(text.replace(/,\s*/g, ', '), size, maxW, 2)
+  const W = Math.ceil(Math.max(...lines.map(l => textWidth(l, size))) + 2)
+  const lh = Math.round(size * 1.4)
+  const H = Math.ceil(lh * lines.length + size * 0.35)
+  return { source: svg(W, H, lines.map((l, i) => txt(0, Math.round(size * 1.05 + i * lh), size, l, 'class="lk" font-weight="500"')).join('')), height: H }
 }
 
 // Marc: what is happening now and what comes next, read from the jobs themselves (a written
@@ -304,30 +308,33 @@ export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, str
   const parts: string[] = []
   const nx = badge ? badge.w : 0
   if (badge) parts.push(badge.css, badge.svg)
-  y += 22
-  parts.push(txt(nx, y, T.size.header, fitText(b.name, T.size.header, W - nx), 'class="t" font-weight="600"'))
-  y += 22
+  y += 24
+  parts.push(txt(nx, y, T.size.header, fitText(b.name, T.size.header, W - nx), 'class="t" font-weight="700"'))
+  y += 26
   parts.push(txt(0, y, T.size.summary, fitText(summaryLine(b), T.size.summary, W), 'class="t"'))
   const nn = nowNext(b)
   const rows: [string, string, string][] = [
     [words.now ?? 'Now', nn.now, T.status.running],
     [words.next ?? 'Next', nn.next, T.status.planned],
   ]
-  const keyW = Math.max(...rows.map(([k]) => textWidth(k, T.size.body))) + 10
+  const keyW = Math.max(...rows.map(([k]) => textWidth(k, T.size.now))) + 10
   for (const [k, v, color] of rows) {
     if (!v) continue
-    const lines = wrap(v, T.size.body, W - keyW, 2)
+    const lines = wrap(v, T.size.now, W - keyW, 2)
     lines.forEach((line, i) => {
-      y += T.line.body + (i ? 0 : 2)
-      if (!i) parts.push(txt(0, y, T.size.body, k, `fill="${color}" font-weight="600"`))
-      parts.push(txt(keyW, y, T.size.body, line, 'class="s"'))
+      y += T.line.now + (i ? 0 : 3)
+      if (!i) parts.push(txt(0, y, T.size.now, k, `fill="${color}" font-weight="600"`))
+      parts.push(txt(keyW, y, T.size.now, line, 'class="s"'))
     })
   }
-  y += 12
+  y += 14
   // Tiles: shipped, running, waiting, to do (planned + later), inset for their shadows.
+  // Marc: four in a row where there is room, else two over two so each can be big: the number large
+  // in its status colour, the label under it, no dot.
   const gap = 8
   const I = GLASS.inset
-  const tw = (W - I * 2 - gap * 3) / 4
+  const perRow = W >= 600 ? 4 : 2
+  const tw = (W - I * 2 - gap * (perRow - 1)) / perRow
   const tiles: [string, number, string][] = [
     [words.tiles[0], c.shipped, T.status.shipped],
     [words.tiles[1], c.running, T.status.running],
@@ -335,15 +342,16 @@ export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, str
     [words.tiles[3], c.planned + c.later, T.status.planned],
   ]
   tiles.forEach(([k, v, color], i) => {
-    const x = I + i * (tw + gap)
+    const x = I + (i % perRow) * (tw + gap)
+    const ty = y + Math.floor(i / perRow) * (T.tileH + gap)
     parts.push(
-      glassPanel(x, y, tw, T.tileH, { r: GLASS.tileRadius, tint: color, isQuiet: v === 0 }),
-      `<circle cx="${x + 14}" cy="${y + 17}" r="3.5" fill="${color}"/>`,
-      txt(x + 22, y + 21, T.size.tileKey, fitText(k, T.size.tileKey, tw - 30), 'class="s"'),
-      txt(x + 12, y + 47, T.size.tileValue, String(v), 'class="t" font-weight="600" font-variant-numeric="tabular-nums"'),
+      glassPanel(x, ty, tw, T.tileH, { r: GLASS.tileRadius, tint: color, isQuiet: v === 0 }),
+      txt(x + 14, ty + 38, T.size.tileValue, String(v), `fill="${color}" font-weight="700" font-variant-numeric="tabular-nums"`),
+      txt(x + 14, ty + 59, T.size.tileKey, fitText(k, T.size.tileKey, tw - 28), 'class="s"'),
     )
   })
-  y += T.tileH + 12
+  const tileRows = Math.ceil(tiles.length / perRow)
+  y += tileRows * T.tileH + (tileRows - 1) * gap + 12
   // Progress by status: shipped, running, waiting, planned, later, left to right, as liquid in glass.
   const BW = W - I * 2
   const order: JobStatus[] = ['shipped', 'running', 'waiting', 'planned', 'later']
@@ -371,7 +379,7 @@ export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[]
   const date = `${words.updated} ${fmtDay(j.updated)}`
   const dateW = textWidth(date, T.size.label) + 8
   parts.push(
-    txt(x0, y, T.size.label, fitText(labelOf(b, j).toUpperCase(), T.size.label, inner - dateW), `fill="${color}" font-weight="600" letter-spacing=".04em"`),
+    txt(x0, y, T.size.label, fitText(labelOf(b, j).toUpperCase(), T.size.label, inner - dateW), `fill="${color}" font-weight="700" letter-spacing=".04em"`),
     txt(xr, y, T.size.label, date, 'class="m" text-anchor="end"'),
   )
   const title = wrap(j.title, T.size.title, inner, T.maxLines.title)
