@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Savvy board</title>
+<style>
+/* Dark first; light under the media query, as the drawings' own CSS follows the OS too. */
+:root{color-scheme:dark;--bg:#1a1a19;--fg:#ececec;--dim:#a8a8a4;--faint:#8d8d89;--edge:#9a9a9a59;--fill:rgba(128,128,128,.05);--sheen:rgba(255,255,255,.10);--link:#6aa8f5;--btn:rgba(255,255,255,.06)}
+@media (prefers-color-scheme: light){:root{color-scheme:light;--bg:#faf9f7;--fg:#1f1f1f;--dim:#5f5f5c;--faint:#80807c;--edge:#00000021;--fill:rgba(255,255,255,.6);--sheen:rgba(255,255,255,.7);--link:#2563c9;--btn:rgba(0,0,0,.05)}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.35 -apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif}
+body{padding:10px 12px 24px;overflow-x:hidden}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:#8885;border-radius:3px}
+svg{display:block}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+
+/* Controls: one line, small, each with its icon. */
+.controls{display:flex;flex-wrap:nowrap;gap:6px;align-items:center;margin-bottom:10px;white-space:nowrap;overflow:hidden}
+.controls button{font-size:12px;color:var(--dim);background:var(--btn);border-radius:7px;padding:3px 8px}
+.controls button:hover{color:var(--fg)}
+.controls .state{margin-left:auto;font-size:11px;color:var(--faint)}
+.controls .state.off{color:#D0453F}
+
+.cols{display:flex;flex-direction:column;gap:18px}
+.cols.wide{flex-direction:row;align-items:flex-start;gap:16px}
+.cols.wide .col{flex:0 0 var(--cw);min-width:0}
+body.swap .cols{flex-direction:column-reverse}
+body.swap .cols.wide{flex-direction:row-reverse}
+.col{display:flex;flex-direction:column;gap:8px}
+.group{display:flex;flex-direction:column;gap:8px}
+.group:empty{display:none}
+h3,.fold{margin:6px 0 0;font-size:12.5px;font-weight:500;color:var(--dim);text-align:left}
+.fold::before{content:'▾ '}
+body.fold-shipped [data-fold=shipped]::before,body.fold-done [data-fold=done]::before{content:'▸ '}
+body.fold-shipped [data-group=shipped],body.fold-done [data-group=done]{display:none}
+.memo{align-self:flex-start;font-size:12.5px;color:var(--link);text-decoration:none}
+.empty{color:var(--faint);margin:2px 0}
+
+/* Job cards: frosted glass, the job's colour only under the pointer, with a glimmer. */
+.job{position:relative;overflow:hidden;border:1px solid var(--edge);border-radius:14px;background:linear-gradient(180deg,var(--sheen),transparent 38px),var(--fill);padding:0 11px 10px;transition:border-color .3s,box-shadow .3s}
+.job::before{content:'';position:absolute;inset:0 0 auto;height:1px;background:linear-gradient(90deg,rgba(255,255,255,.45),rgba(255,255,255,.08) 40%,rgba(255,255,255,.25))}
+.pr{display:inline-block;margin-top:1px;font-size:12px;font-weight:500;color:var(--link);text-decoration:none}
+.pr:hover{text-decoration:underline}
+
+/* Agent cards: the drawing holds its own glass; the glow and glimmer sit on its rounded panel. */
+.agent{position:relative}
+.agent>[data-k=s]{position:relative;border-radius:19px;overflow:hidden}
+.open{margin:2px 0 0 6px;font-size:12px;color:var(--link)}
+
+/* Hover, shared: a soft ring of the card's colour inside its edge and a band of light sweeping
+   across every couple of seconds. Subtle, so it never fights the text. */
+.job:hover{border-color:color-mix(in srgb,var(--tint) 55%,transparent);box-shadow:inset 0 0 14px -6px var(--tint)}
+.agent>[data-k=s]::before{content:'';position:absolute;inset:3px;border-radius:16px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tint) 55%,transparent),inset 0 0 14px -5px var(--tint);opacity:0;transition:opacity .3s;pointer-events:none}
+.agent:hover>[data-k=s]::before{opacity:1}
+.job::after,.agent>[data-k=s]::after{content:'';position:absolute;top:-50%;bottom:-50%;left:0;width:90px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);transform:translateX(-160px) skewX(-20deg);pointer-events:none;opacity:0}
+.job:hover::after,.agent:hover>[data-k=s]::after{opacity:1;animation:glimmer 2.6s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes glimmer{0%{transform:translateX(-160px) skewX(-20deg)}45%,100%{transform:translateX(calc(var(--cw,400px) + 90px)) skewX(-20deg)}}
+@media (prefers-reduced-motion:reduce){.job:hover::after,.agent:hover>[data-k=s]::after{animation:none;opacity:0}}
+
+/* Collapse: the build header and the team strip; All chats: other chats listed too. */
+body:not(.compact) .compact{display:none}
+body.compact .full,body.compact .jobs>:not([data-k=bh]){display:none}
+body:not(.all) .outside{display:none}
+
+/* The drawings' own CSS, once for all of them; their in-drawing hover is replaced by the CSS above. */
+/*SVG_CSS*/
+.gp:hover .gglow{opacity:0!important}.gp:hover .gsweep{animation:none!important}
+</style>
+</head>
+<body>
+<div class="controls">
+  <button id="swap" title="Agents first or jobs first">⇅ Swap</button>
+  <button id="compact" title="Collapse to the header and the team">⊟ Collapse</button>
+  <button id="all" title="List other chats too (never in the totals)">◎ All</button>
+  <button id="refresh" title="Read the sessions again now">↻ Refresh</button>
+  <span class="state" id="state">connecting…</span>
+</div>
+<main id="board"></main>
+<script>
+// Folds and toggles live in this window's storage; every part is drawn and CSS shows what is chosen.
+const KEYS = ['swap', 'compact', 'all', 'fold-shipped', 'fold-done']
+const store = {
+  get: k => { try { return localStorage.getItem('savvy-board:' + k) === '1' } catch { return false } },
+  set: (k, v) => { try { localStorage.setItem('savvy-board:' + k, v ? '1' : '0') } catch {} },
+}
+let outside = 0
+const labels = () => {
+  const c = document.body.classList
+  document.getElementById('compact').textContent = c.contains('compact') ? '⊞ Expand' : '⊟ Collapse'
+  document.getElementById('all').textContent = c.contains('all') ? '◉ Build' : `◎ All ${outside}`
+}
+for (const k of KEYS) document.body.classList.toggle(k, store.get(k))
+const toggle = k => { const on = document.body.classList.toggle(k); store.set(k, on); labels() }
+for (const k of ['swap', 'compact']) document.getElementById(k).onclick = () => toggle(k)
+// Other chats' cards are drawn only while shown: the server draws them on request.
+document.getElementById('all').onclick = () => { toggle('all'); connect() }
+labels()
+
+const post = path => fetch(path, { method: 'POST' }).catch(() => {})
+document.getElementById('board').addEventListener('click', e => {
+  const t = e.target.closest('[data-fold],[data-open],[data-memo]')
+  if (!t) return
+  if (t.dataset.fold) toggle('fold-' + t.dataset.fold)
+  else if (t.dataset.open) post('/open?id=' + encodeURIComponent(t.dataset.open))
+  else if (t.dataset.memo) post('/memo')
+})
+
+// Only what changed is replaced, so a card under the pointer keeps its hover and unchanged drawings
+// keep their animations running. Keyed children (data-k) are matched one level at a time.
+const sameShell = (a, b) => a.tagName === b.tagName && a.attributes.length === b.attributes.length && [...a.attributes].every(x => b.getAttribute(x.name) === x.value)
+const keyed = el => el.children.length > 0 && [...el.children].every(c => c.dataset.k)
+function morph(old, next) {
+  if (old.isEqualNode(next)) return
+  if (!sameShell(old, next) || !keyed(old) || !keyed(next)) return void old.replaceWith(next)
+  const a = [...old.children], b = [...next.children]
+  if (a.length !== b.length || a.some((c, i) => c.dataset.k !== b[i].dataset.k)) return void old.replaceChildren(...b)
+  a.forEach((c, i) => morph(c, b[i]))
+}
+
+const board = document.getElementById('board')
+const state = document.getElementById('state')
+let es = null
+let width = 0
+function connect() {
+  es?.close()
+  width = board.clientWidth
+  es = new EventSource(`/events?w=${width}&all=${document.body.classList.contains('all') ? 1 : 0}`)
+  es.onopen = () => { state.textContent = 'live'; state.className = 'state' }
+  es.onerror = () => { state.textContent = 'offline, retrying'; state.className = 'state off' }
+  es.onmessage = e => {
+    const d = JSON.parse(e.data)
+    outside = d.outside
+    document.title = d.title
+    labels()
+    const t = document.createElement('main')
+    t.id = 'board'
+    t.innerHTML = d.html
+    if (!board.firstElementChild || !t.firstElementChild) board.replaceChildren(...t.children)
+    else morph(board.firstElementChild, t.firstElementChild)
+  }
+}
+document.getElementById('refresh').onclick = () => { if (!es || es.readyState === 2) connect(); post('/refresh') }
+let resizing = 0
+addEventListener('resize', () => {
+  clearTimeout(resizing)
+  resizing = setTimeout(() => { if (Math.abs(board.clientWidth - width) > 4) connect() }, 300)
+})
+connect()
+</script>
+</body>
+</html>
