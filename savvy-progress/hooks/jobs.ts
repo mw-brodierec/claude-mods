@@ -335,13 +335,16 @@ export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, str
   const BW = W - I * 2
   const order: JobStatus[] = ['shipped', 'running', 'waiting', 'planned', 'later']
   parts.push(glassBar(I, y, BW, T.barH, order.map(s => ({ w: c.total ? (BW * c[s]) / c.total : 0, color: T.status[s], isFaint: s === 'planned' || s === 'later' }))))
-  y += T.barH + I + 2
+  // Room under the bar for its glow, so the drawing's edge never cuts it.
+  y += T.barH + 10
   return { source: svg(W, y, parts.join('')), height: y }
 }
 
 // One job's card: label and date, title, detail, what it waits on, its PR, its live agents.
-// `linkRoom` (Marc): px left empty at the bottom, where the pane lays the PR link inside the card.
-export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[], words: { updated: string; waitingOn: string; more: string }, linkRoom = 0): Drawn => {
+// `isBare` (Marc): the body alone, no glass panel: the pane draws the card as a native box around
+// it, so a PR link can flow beneath the body inside the card and the box grows to fit it.
+// `hasLink`: a link follows, so the body ends with less room below.
+export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[], words: { updated: string; waitingOn: string; more: string }, opts: { isBare?: boolean; hasLink?: boolean } = {}): Drawn => {
   const T = JOB_THEME
   const color = T.status[j.status]
   const I = GLASS.inset
@@ -395,10 +398,10 @@ export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[]
       parts.push(txt(x0 + 13, y, T.size.agent, `+${runs.length - T.maxAgents} ${words.more}`, 'class="m"'))
     }
   }
-  const H = Math.ceil(y + T.pad + I + linkRoom)
+  const H = Math.ceil(y + (opts.hasLink ? 6 : T.pad + I))
   const isQuiet = j.status === 'planned' || j.status === 'later' || j.status === 'shipped'
   return {
-    source: svg(W, H, glassPanel(I, I, W - I * 2, H - I * 2, { tint: color, isQuiet }) + parts.join('')),
+    source: svg(W, H, (opts.isBare ? '' : glassPanel(I, I, W - I * 2, H - I * 2, { tint: color, isQuiet })) + parts.join('')),
     height: H,
   }
 }

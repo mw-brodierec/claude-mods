@@ -166,7 +166,8 @@ test('the desktop pane lays out by width with only a Swap button, and the band i
   // Drawings carry no size, so the app fits each to its column, and none is a hoverable frame
   // (a frame keeps its drawn height when the picture shrinks, leaving uneven gaps).
   const svgs = (await side.findAll({ type: 'Svg' })) as { props: { width?: number; isInteractive?: boolean; alt: string } }[]
-  expect(svgs.every(x => x.props.width === undefined)).toBe(true)
+  // (The decorative layers a job card clips, its sheen and glimmer, have no alt and a fixed size.)
+  expect(svgs.filter(x => x.props.alt).every(x => x.props.width === undefined)).toBe(true)
   expect(svgs.some(x => x.props.isInteractive)).toBe(false)
   // Swap puts the agents column first.
   const order = async () => ((await side.findAll({ type: 'Box' })) as { key?: string }[]).map(x => x.key).filter(k => k === 'jobs-col' || k === 'agents-col')
@@ -399,7 +400,8 @@ test('Now and Next come from the jobs: running first, else waiting; then the nex
   expect(nowNext(mergeBuild(b, { next: ['mobile', 'seeds', 'harvest'] }, 3_000, '/p')).next).toBe('Job 5 Mobile layout · Job 4 Harvest log')
 })
 
-// Marc: a job's PR link sits inside its card, and the pane has a Refresh button that re-reads everything.
+// Marc: a job's PR link flows inside its card (a native box, so it grows to fit the link: never laid
+// over the drawing by estimate), and the pane has a Refresh button that re-reads everything.
 test('the PR link is inside its job card, and Refresh re-reads the pane', async ($, on) => {
   harness(on)
   await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
@@ -417,6 +419,8 @@ test('the PR link is inside its job card, and Refresh re-reads the pane', async 
   }
   const card = find(await ui.drawn(), x => x.props?.key === 'job-seeds')
   expect(find(card, x => x.type === 'Link' && x.props?.href === 'https://example.com/pr/12')).toBeTruthy()
+  const holder = find(card, x => x.type === 'Box' && Boolean(find(x, y => y.type === 'Link')) && x !== card)
+  expect(holder?.props?.position, 'the link is in the flow, not placed over the drawing').toBeUndefined()
   expect(await ui.find({ type: 'Button', key: 'refresh' })).toBeTruthy()
   await ui.press({ key: 'refresh' })
   expect(await ui.find({ type: 'Button', key: 'refresh' })).toBeTruthy()

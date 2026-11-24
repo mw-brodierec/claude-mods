@@ -276,8 +276,9 @@ const streaks = (period: number): string => {
 const LASER_BEAM = `<svg xmlns="http://www.w3.org/2000/svg" width="${LASER_W}" height="${LASER_H}" viewBox="0 0 ${LASER_W} ${LASER_H}"><defs>
 <linearGradient id="b" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1E0B4B"/><stop offset=".6" stop-color="#2E1065"/><stop offset=".82" stop-color="#4C1D95"/><stop offset=".93" stop-color="#7C3AED"/><stop offset=".99" stop-color="#C4B5FD"/><stop offset="1" stop-color="#EDE9FE"/></linearGradient>
 <linearGradient id="w" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E9D5FF" stop-opacity="0"/><stop offset=".5" stop-color="#E9D5FF" stop-opacity=".22"/><stop offset="1" stop-color="#E9D5FF" stop-opacity="0"/></linearGradient>
-<linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></linearGradient>
-<linearGradient id="c" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset=".55" stop-color="#DDD6FE" stop-opacity="0"/><stop offset="1" stop-color="#FAF5FF" stop-opacity=".85"/></linearGradient>
+<linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".45"/><stop offset=".3" stop-color="#000" stop-opacity="0"/><stop offset=".7" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>
+<filter id="cb" x="-1%" y="-100%" width="102%" height="300%"><feGaussianBlur stdDeviation="1.6"/></filter>
+<linearGradient id="c" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F5F3FF" stop-opacity=".35"/><stop offset=".75" stop-color="#FAF5FF" stop-opacity=".8"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="1"/></linearGradient>
 <radialGradient id="h" cx="1" cy=".5" r="1"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".35" stop-color="#DDD6FE" stop-opacity=".6"/><stop offset="1" stop-color="#A78BFA" stop-opacity="0"/></radialGradient>
 </defs><style>
 .flow{animation:flow 6s linear infinite}@keyframes flow{to{transform:translateX(240px)}}
@@ -285,14 +286,16 @@ const LASER_BEAM = `<svg xmlns="http://www.w3.org/2000/svg" width="${LASER_W}" h
 .fast{animation:fast 5s linear infinite}@keyframes fast{to{transform:translateX(120px)}}
 .tw{animation:tw 2.8s ease-in-out infinite}.tw2{animation:tw 3.6s ease-in-out infinite -1.4s}@keyframes tw{50%{opacity:.08}}
 .head{animation:head 3.2s ease-in-out infinite}@keyframes head{50%{opacity:.7}}
-@media (prefers-reduced-motion:reduce){.flow,.slow,.fast,.tw,.tw2,.head{animation:none}}
+.hum{animation:hum 2.4s ease-in-out infinite}@keyframes hum{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.flow,.slow,.fast,.tw,.tw2,.head,.hum{animation:none}}
 </style>
 <rect width="${LASER_W}" height="${LASER_H}" fill="url(#b)"/>
 ${streaks(240)}
-<rect x="0" y="${LASER_H / 2 - 1}" width="${LASER_W}" height="2" fill="url(#c)"/>
+<rect width="${LASER_W}" height="${LASER_H}" fill="url(#v)"/>
+<rect class="hum" x="0" y="${LASER_H / 2 - 4}" width="${LASER_W}" height="8" rx="4" fill="url(#c)" filter="url(#cb)" opacity=".55"/>
+<rect x="0" y="${LASER_H / 2 - 1.5}" width="${LASER_W}" height="3" rx="1.5" fill="url(#c)"/>
 ${pixelLayer('slow', 160, 7, 7, 2)}
 ${pixelLayer('fast', 120, 4, 31, 1.5)}
-<rect width="${LASER_W}" height="${LASER_H}" fill="url(#v)"/>
 <rect class="head" x="${LASER_W - 36}" y="0" width="36" height="${LASER_H}" fill="url(#h)"/>
 </svg>`
 
@@ -342,8 +345,11 @@ const GLASS_SHEEN = `<svg xmlns="http://www.w3.org/2000/svg" width="2400" height
 // The band's bodyColumns counts cells of the app's code font, about 8px; taken a little smaller to stay safe.
 const BAND_CELL_PX = 7.4
 const COL_GAP_PX = 16
-// Px a job card leaves empty at its bottom for the PR link the pane lays there (one row of text).
-const PR_ROOM = 18
+// Marc: the glimmer on a hovered job card: a soft band of light sweeping left to right every 2.6s,
+// drawn wide and tall and clipped by the card's box, so it needs no measure of the card.
+const GLIMMER_W = 1400
+const GLIMMER_H = 400
+const GLIMMER = `<svg xmlns="http://www.w3.org/2000/svg" width="${GLIMMER_W}" height="${GLIMMER_H}" viewBox="0 0 ${GLIMMER_W} ${GLIMMER_H}"><style>.gm{animation:gm 2.6s cubic-bezier(.4,0,.2,1) infinite}@keyframes gm{0%{transform:translateX(-160px)}45%,100%{transform:translateX(1100px)}}@media (prefers-reduced-motion:reduce){.gm{animation:none;opacity:0}}</style><defs><linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><g class="gm"><rect x="0" y="-100" width="90" height="${GLIMMER_H + 200}" fill="url(#gl)" transform="skewX(-20)"/></g></svg>`
 
 const buildsDir = async ($: EngineInterface): Promise<string> => `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/builds`
 
@@ -1725,10 +1731,31 @@ export const register: Register = (on, options) => {
       if (!b) return agentsColumn
 
       const header = buildHeaderSvg(CW, b, { tiles: s.tiles, now: s.nowWord, next: s.nextWord }, coachBadge(running.length > 0))
+      // Marc: a job card is a native box: the drawing holds its text, and the PR link flows beneath
+      // it inside the same box, so the box grows to whatever size the app draws the link at (a link
+      // laid over the drawing by estimate overlapped the text and was cut off). Under the pointer the
+      // edge takes the job's colour and a glimmer sweeps across.
       const card = (j: Job) => {
-        // Marc: the PR link sits inside its card, in room the drawing leaves at the bottom.
-        const drawn = jobCardSvg(CW, b, j, runLines(runsOf(j, list), at), { updated: s.updated, waitingOn: s.waitingOn, more: s.more }, j.prUrl ? PR_ROOM : 0)
-        return [glowCard(`job-${j.id}`, drawn.source, `${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`, JOB_COLORS[j.status], prLink(j))]
+        const tint = JOB_COLORS[j.status]
+        const drawn = jobCardSvg(CW, b, j, runLines(runsOf(j, list), at), { updated: s.updated, waitingOn: s.waitingOn, more: s.more }, { isBare: true, hasLink: Boolean(j.prUrl) })
+        return [
+          <Box key={`job-${j.id}`} position="relative" overflow="hidden" flexDirection="column" borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL} hover={{ borderColor: tint }}>
+            <Box position="absolute" top={0} left={0}>
+              <Svg source={GLASS_SHEEN} alt="" width={2400} height={40} />
+            </Box>
+            <Box position="absolute" top={0} left={0} display="none" hover={{ display: 'flex' }}>
+              <Svg source={GLIMMER} alt="" width={GLIMMER_W} height={GLIMMER_H} />
+            </Box>
+            <Svg source={drawn.source} alt={`${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`} />
+            {j.prUrl ? (
+              <Box paddingLeft={1} paddingBottom={1}>
+                {prLink(j)}
+              </Box>
+            ) : (
+              ''
+            )}
+          </Box>,
+        ]
       }
       const jobsColumn = (
         <Box key="jobs-col" flexDirection="column" gap={1} {...(isWide ? { width: 0, flexGrow: 1, minWidth: 0 } : {})}>
@@ -2011,8 +2038,12 @@ export const register: Register = (on, options) => {
                 the tip live in the empty track beside it. Both sources are constant, so a redraw
                 never restarts the motion. */}
             <Box key="laser-track" width="100%" height={1} flexDirection="row" backgroundColor="#80808026">
-              <Box key="laser-fill" width={`${pct}%`} height={1} position="relative" overflow="hidden">
-                <Box key="laser-beam" position="absolute" top={0} right={0}>
+              {/* Marc: the app ignored an absolute `right` offset, so the drawing's dark tail filled the bar
+                  and it looked empty. The beam now sits in the flow, pushed to the fill's right end
+                  (flex-end, no shrink), its excess clipped off the left; the bar's own colour lies
+                  underneath, so the fill shows even if the drawing doesn't. */}
+              <Box key="laser-fill" width={`${pct}%`} minWidth={0} height={1} flexDirection="row" justifyContent="flex-end" overflow="hidden" backgroundColor={bar.color}>
+                <Box key="laser-beam" flexShrink={0} width={LASER_W}>
                   <Svg key="beam" source={LASER_BEAM} alt="" width={LASER_W} height={LASER_H} />
                 </Box>
               </Box>

@@ -25,6 +25,8 @@ export const GLASS_CSS = `<style>
 .gsw0{stop-color:#ffffff;stop-opacity:0}.gsw1{stop-color:#ffffff;stop-opacity:.7}
 .gglow,.gsweep{opacity:0}
 .gglow{transition:opacity .3s ease}
+.hum{animation:hum 2.4s ease-in-out infinite}@keyframes hum{50%{opacity:.55}}
+@media (prefers-reduced-motion:reduce){.hum{animation:none}}
 .gp:hover .gglow{opacity:.95}
 .gsweep{transform-box:fill-box}
 .gp:hover .gsweep{animation:gsw .85s ease-out}
@@ -47,6 +49,7 @@ export const glassDefs = (id = 'g'): string => `<defs>
 <linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="gs0"/><stop offset="1" class="gs1"/></linearGradient>
 <linearGradient id="${id}w" x1="0" y1="0" x2="1" y2="0"><stop offset="0" class="gsw0"/><stop offset=".5" class="gsw1"/><stop offset="1" class="gsw0"/></linearGradient>
 <filter id="${id}b" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="${GLASS.glowBlur}"/></filter>
+<filter id="${id}sg" x="-5%" y="-200%" width="110%" height="500%"><feGaussianBlur stdDeviation="2.4"/></filter>
 <filter id="${id}d" x="-10%" y="-20%" width="120%" height="160%"><feDropShadow dx="0" dy="${GLASS.shadowY}" stdDeviation="${GLASS.shadowBlur}" class="gsh"/></filter>
 </defs>`
 
@@ -75,23 +78,34 @@ export const glassPanel = (x: number, y: number, w: number, h: number, o: PanelO
   ].join('')
 }
 
-// A glass capsule track with a liquid fill: for progress bars.
+// Marc: progress bars look like a lightsaber's beam (not the sword): a white-hot core, a blade in
+// the segment's colour around it and a soft glow of that colour beyond, humming gently. Faint
+// segments (work not started) stay a dim glass fill with no beam. Leave about h/2 + 4px clear
+// around the bar for the glow.
 export const glassBar = (x: number, y: number, w: number, h: number, segments: { w: number; color: string; isFaint?: boolean }[], id = 'g'): string => {
-  const clip = `${id}bar${Math.round(y)}`
+  const r = h / 2
   let at = x
-  const fills = segments
-    .filter(s => s.w > 0)
-    .map(s => {
-      const out = `<rect x="${at}" y="${y}" width="${s.w}" height="${h}" fill="${s.color}"${s.isFaint ? ' opacity=".35"' : ''}/>`
-      at += s.w
-      return out
-    })
-    .join('')
+  const lit: string[] = []
+  const glow: string[] = []
+  const faint: string[] = []
+  for (const s of segments.filter(seg => seg.w > 0)) {
+    if (s.isFaint) faint.push(`<rect x="${at}" y="${y}" width="${s.w}" height="${h}" fill="${s.color}" opacity=".3"/>`)
+    else {
+      lit.push(`<rect x="${at}" y="${y}" width="${s.w}" height="${h}" fill="${s.color}"/>`)
+      glow.push(`<rect x="${at}" y="${y - h * 0.15}" width="${s.w}" height="${h * 1.3}" rx="${r}" fill="${s.color}"/>`)
+    }
+    at += s.w
+  }
+  const litW = segments.filter(seg => seg.w > 0 && !seg.isFaint).reduce((n, seg) => n + seg.w, 0)
+  const clip = `${id}bar${Math.round(y)}_${Math.round(x)}`
+  const coreH = Math.max(1.2, h * 0.34)
+  const core = litW > 0 ? `<rect x="${x + r * 0.4}" y="${y + (h - coreH) / 2}" width="${Math.max(0, litW - r * 0.8)}" height="${coreH}" rx="${coreH / 2}" fill="#ffffff" opacity=".9"/>` : ''
   return [
-    `<clipPath id="${clip}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}"/></clipPath>`,
-    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" class="k"/>`,
-    `<g clip-path="url(#${clip})">${fills}<rect x="${x}" y="${y}" width="${w}" height="${h / 2}" fill="#ffffff" opacity=".28"/></g>`,
-    `<rect x="${x + 0.5}" y="${y + 0.5}" width="${w - 1}" height="${h - 1}" rx="${(h - 1) / 2}" fill="none" stroke="url(#${id}r)" stroke-width="1"/>`,
+    `<clipPath id="${clip}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}"/></clipPath>`,
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" class="k" opacity=".55"/>`,
+    `<g clip-path="url(#${clip})">${faint.join('')}</g>`,
+    glow.length ? `<g class="hum" filter="url(#${id}sg)" opacity=".8">${glow.join('')}</g>` : '',
+    `<g clip-path="url(#${clip})">${lit.join('')}${core}</g>`,
   ].join('')
 }
 
