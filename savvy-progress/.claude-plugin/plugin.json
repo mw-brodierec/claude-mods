@@ -1,7 +1,7 @@
 {
   "name": "savvy-progress",
-  "version": "1.2.0-marc.26",
-  "description": "Progress bar above the prompt for /savvy-flow, plus an agents panel (/agents-info): running, finished and planned subagents with model, task progress, context, cost and time. Marc: side sessions (start_session) count too, each row opens its chat. Build jobs view (jobs tool): every job of a multi-PR build with status, PR and its live agents, beside the agents.",
+  "version": "1.2.0-marc.27",
+  "description": "Progress bar above the prompt for /savvy-flow, plus an agents panel (/agents-info): running, finished and planned subagents with model, task progress, context, cost and time. Marc: side sessions (start_session) count too, each row opens its chat. Build jobs (jobs tool) feed the band and the savvy board; the pane shows agents only.",
   "author": {
     "name": "johnnyvizz",
     "url": "https://github.com/johnnyvizz"

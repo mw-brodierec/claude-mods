@@ -86,12 +86,6 @@ export type Panel = {
   isCompact: boolean
   isDoneCollapsed: boolean
   autoOpenedFor: string
-  /** Marc: the Shipped group of the jobs view folded. */
-  isShippedCollapsed?: boolean
-  // Marc: the switch's choice of jobs beside agents or above them; absent, the pane's width decides.
-  layout?: 'stacked' | 'side'
-  // Marc: the agents before the build's jobs (on top, or on the left).
-  isAgentsFirst?: boolean
   /** Marc: other chats on the machine listed too, under their own heading; the totals stay the build's. */
   isShowingAll?: boolean
 }

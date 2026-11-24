@@ -1,7 +1,7 @@
 {
   "name": "savvy-flow",
-  "version": "1.2.0-marc.2",
-  "description": "Orchestrated delivery flow: the session model plans, owns design and reviews; five tiered worker subagents implement. Pairs with the savvy-progress mod for a live progress bar and agents panel. Marc: multi-job builds keep a jobs list (the savvy-progress jobs view), and mega builds start with a build memo.",
+  "version": "1.2.0-marc.3",
+  "description": "Orchestrated delivery flow: the session model plans, owns design and reviews; five tiered worker subagents implement. Pairs with the savvy-progress mod for a live progress bar and agents panel. Marc: multi-job builds keep a jobs list (savvy-progress band and savvy board), and mega builds start with a build memo.",
   "author": {
     "name": "johnnyvizz",
     "url": "https://github.com/johnnyvizz"

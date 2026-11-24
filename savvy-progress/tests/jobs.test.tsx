@@ -112,7 +112,7 @@ test('merge upserts by id, stamps updated only on change, and derives the summar
   expect(wrap('one two three four five six', 11, 40, 2).length).toBe(2)
 })
 
-test('the jobs tool writes the build file, answers the list, and the pane shows it', async ($, on) => {
+test('the jobs tool writes the build file and answers the list; the pane shows no jobs', async ($, on) => {
   const files = harness(on)
   const ran = await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
   const text = JSON.stringify(ran)
@@ -127,24 +127,17 @@ test('the jobs tool writes the build file, answers the list, and the pane shows 
   const saved = JSON.parse(files.get(path) ?? '{}') as { jobs: { id: string; status: string }[] }
   expect(saved.jobs.map(j => `${j.id}:${j.status}`)).toEqual(['seeds:shipped', 'water:running', 'frost:waiting', 'harvest:running', 'mobile:later'])
 
+  // Marc (Nov 23): the pane shows agents only; build jobs live in the tracker artifact.
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    // Desktop draws the PR numbers at the card's size with a ↗ link beside them; the terminal keeps one link.
-    const links = (await ui.findAll({ type: 'Link' })) as { text?: string; props: { href?: string } }[]
-    expect(links.some(l => l.props.href === 'https://example.com/pr/12' && (l.text === 'PR 12 ↗' || l.text === '↗'))).toBe(true)
-    if (surface === 'desktop') expect(await ui.find({ type: 'Svg', alt: 'PR 12' } as never)).toBeTruthy()
-    expect(await ui.find({ type: 'Button', key: 'shipped' })).toBeTruthy()
+    expect(await ui.find({ type: 'Link' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', key: 'shipped' })).toBeUndefined()
+    expect(await ui.find({ type: 'Box', key: 'jobs-col' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /Waiting on: a weather API key/ })).toBeUndefined()
     // The side session's own row still opens its chat.
     expect(await ui.find({ type: 'Button', key: 'open-local_w1' })).toBeTruthy()
     await ui.unmount()
   }
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: /1 of 5 jobs shipped, 2 running, 1 waiting/ })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: /Waiting on: a weather API key/ })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: /Updated Sun Nov 22/ })).toBeTruthy()
-  // The job's linked side session is listed on its card with its state.
-  expect(await ui.find({ type: 'Text', text: /water-sched · running/ })).toBeTruthy()
-  await ui.unmount()
 })
 
 test('the band shows the build and counts live sessions, not in-flight Agent calls', async ($, on) => {
@@ -159,39 +152,21 @@ test('the band shows the build and counts live sessions, not in-flight Agent cal
   }
 })
 
-test('the desktop pane lays out by width with only a Swap button, and the band is one glass row', async ($, on) => {
+test('the desktop pane is one agents column with no Swap, and the band is one glass row', async ($, on) => {
   harness(on)
   await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
 
-  const label = async (ui: { find: (q: object) => Promise<unknown> }, key: string) => ((await ui.find({ type: 'Button', key })) as { props: { label: string } } | undefined)?.props.label
-  const wide = { ...PANE, surface: 'desktop' as const, props: { ...PANE.props, bodyColumns: 140 } }
-  const side = await $.ui.mount(wide)
-  // Wide, it opens side by side, two equal columns; Swap is the only control.
-  expect(await label(side, 'layout-swap')).toBe('⇄ Swap')
-  expect(await side.find({ type: 'Button', key: 'layout-side' })).toBeUndefined()
-  expect(await side.find({ type: 'Button', key: 'layout-stacked' })).toBeUndefined()
-  const cols = (await side.findAll({ type: 'Box' })) as { key?: string; props: { flexGrow?: number; width?: number } }[]
-  expect(cols.filter(x => (x.key === 'jobs-col' || x.key === 'agents-col') && x.props.flexGrow === 1 && x.props.width === 0).length).toBe(2)
-  // Drawings carry no size, so the app fits each to its column, and none is a hoverable frame
-  // (a frame keeps its drawn height when the picture shrinks, leaving uneven gaps).
-  const svgs = (await side.findAll({ type: 'Svg' })) as { props: { width?: number; isInteractive?: boolean; alt: string } }[]
-  // (The decorative layers a job card clips, its sheen and glimmer, have no alt and a fixed size.)
-  expect(svgs.filter(x => x.props.alt).every(x => x.props.width === undefined)).toBe(true)
-  expect(svgs.some(x => x.props.isInteractive)).toBe(false)
-  // Swap puts the agents column first.
-  const order = async () => ((await side.findAll({ type: 'Box' })) as { key?: string }[]).map(x => x.key).filter(k => k === 'jobs-col' || k === 'agents-col')
-  expect(await order()).toEqual(['jobs-col', 'agents-col'])
-  await side.press({ key: 'layout-swap' })
-  expect(await order()).toEqual(['agents-col', 'jobs-col'])
-  await side.unmount()
-
-  // Too narrow for two legible columns: it stacks by itself, with no hint text.
-  const narrow = await $.ui.mount({ ...wide, props: { ...wide.props, bodyColumns: 60 } })
-  const ncols = (await narrow.findAll({ type: 'Box' })) as { key?: string; props: { flexGrow?: number } }[]
-  expect(ncols.filter(x => (x.key === 'jobs-col' || x.key === 'agents-col') && x.props.flexGrow === 1).length).toBe(0)
-  expect(await label(narrow, 'layout-swap')).toBe('⇅ Swap')
-  expect(await narrow.find({ type: 'Text', text: /Widen the pane/ })).toBeUndefined()
-  await narrow.unmount()
+  // The pane has one column of agents and no Swap, wide or narrow.
+  for (const bodyColumns of [140, 60]) {
+    const pane = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, bodyColumns } })
+    expect(await pane.find({ type: 'Button', key: 'layout-swap' })).toBeUndefined()
+    expect(await pane.find({ type: 'Box', key: 'jobs-col' })).toBeUndefined()
+    expect(await pane.find({ type: 'Box', key: 'agents-col' })).toBeTruthy()
+    const svgs = (await pane.findAll({ type: 'Svg' })) as { props: { width?: number; isInteractive?: boolean; alt: string } }[]
+    expect(svgs.filter(x => x.props.alt).every(x => x.props.width === undefined)).toBe(true)
+    expect(svgs.some(x => x.props.isInteractive)).toBe(false)
+    await pane.unmount()
+  }
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const glass = await ui.find({ type: 'Box', key: 'savvy-glass' })
@@ -231,9 +206,9 @@ test('a pane left open comes back after a restart, and one closed by hand does n
   expect(opened).toEqual([])
 })
 
-// Marc: after a restart the pane must show the build another session keeps, wherever it was started.
+// Marc: after a restart the band must show the build another session keeps, wherever it was started.
 for (const [what, project] of [['the same project', '/projects/garden'], ['another folder', '/projects/elsewhere']] as const) {
-  test(`after a restart the pane shows a build started in ${what}`, async ($, on) => {
+  test(`after a restart the band shows a build started in ${what}`, async ($, on) => {
     const files = harness(on)
     on('session.start', (_, e) => e as never)
     on('tool.register', (_, e) => ({ value: { tool: `mcp__savvy-progress__${(e as { name: string }).name}` } }))
@@ -241,21 +216,21 @@ for (const [what, project] of [['the same project', '/projects/garden'], ['anoth
     const b = { ...mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), project) }
     files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(b))
     await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never)
-    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-    expect(await ui.find({ type: 'Text', text: /Garden planner/ })).toBeTruthy()
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect(await ui.find({ type: 'Text', text: /Jobs 1\/5/ })).toBeTruthy()
     await ui.unmount()
   })
 }
 
-test('a start hook that fails before the restore still leaves the pane showing the build', async ($, on) => {
+test('a start hook that fails before the restore still leaves the band showing the build', async ($, on) => {
   const files = harness(on)
   // No registration stubs: the start hook's registrations throw here, as they could in the app.
   on('session.start', (_, e) => e as never)
   files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/elsewhere')))
   await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never).catch(() => undefined)
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await new Promise(r => setTimeout(r, 30))
-  expect(await ui.find({ type: 'Text', text: /Garden planner/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /Jobs 1\/5/ })).toBeTruthy()
   await ui.unmount()
 })
 
@@ -314,10 +289,10 @@ test('with session.start skipped (a resume), the first tool call brings the buil
   const files = harness(on)
   on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false } }))
   files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/garden')))
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await $.tool.call({ tool: 'Bash', command: 'git status', description: 'x' })
   await new Promise(r => setTimeout(r, 30))
-  expect(await ui.find({ type: 'Text', text: /Garden planner/ })).toBeTruthy()
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /Jobs 1\/5/ })).toBeTruthy()
   await ui.unmount()
 })
 
@@ -390,7 +365,7 @@ test('cards glow only on hover, through a hidden layer over a plain image', asyn
   const card = all.find(x => x.props?.key === 'local_w1')
   expect(card?.props?.position).toBe('relative')
   const layers = all.filter(x => x.props?.display === 'none' && x.hover?.display === 'flex' && x.props?.position === 'absolute')
-  expect(layers.length).toBeGreaterThan(1)
+  expect(layers.length).toBeGreaterThan(0)
   expect(layers.every(x => x.props?.key === undefined), 'a keyed layer would be its own hover scope and never light').toBe(true)
   const svgs = (await ui.findAll({ type: 'Svg' })) as { props: { source: string; isInteractive?: boolean } }[]
   expect(svgs.some(x => x.props.isInteractive)).toBe(false)
@@ -409,27 +384,12 @@ test('Now and Next come from the jobs: running first, else waiting; then the nex
   expect(nowNext(mergeBuild(b, { next: ['mobile', 'seeds', 'harvest'] }, 3_000, '/p')).next).toBe('Job 5 Mobile layout · Job 4 Harvest log')
 })
 
-// Marc: a job's PR link flows inside its card (a native box, so it grows to fit the link: never laid
-// over the drawing by estimate), and the pane has a Refresh button that re-reads everything.
-test('the PR link is inside its job card, and Refresh re-reads the pane', async ($, on) => {
+// Marc: the pane has a Refresh button that re-reads everything.
+test('Refresh re-reads the pane', async ($, on) => {
   harness(on)
   await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
   await new Promise(r => setTimeout(r, 30))
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, bodyColumns: 60 } })
-  type Node = { type?: string; props?: Record<string, unknown>; children?: unknown[] }
-  const find = (n: unknown, pred: (x: Node) => boolean): Node | undefined => {
-    if (!n || typeof n !== 'object') return undefined
-    if (pred(n as Node)) return n as Node
-    for (const c of (n as Node).children ?? []) {
-      const hit = find(c, pred)
-      if (hit) return hit
-    }
-    return undefined
-  }
-  const card = find(await ui.drawn(), x => x.props?.key === 'job-seeds')
-  expect(find(card, x => x.type === 'Link' && x.props?.href === 'https://example.com/pr/12')).toBeTruthy()
-  const holder = find(card, x => x.type === 'Box' && Boolean(find(x, y => y.type === 'Link')) && x !== card)
-  expect(holder?.props?.position, 'the link is in the flow, not placed over the drawing').toBeUndefined()
   expect(await ui.find({ type: 'Button', key: 'refresh' })).toBeTruthy()
   await ui.press({ key: 'refresh' })
   expect(await ui.find({ type: 'Button', key: 'refresh' })).toBeTruthy()

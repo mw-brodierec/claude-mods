@@ -1,28 +1,18 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { AgentRun, Build, Flow, Job, Panel, Phase, PlannedTask, SideSession } from '../types'
+import type { AgentRun, Build, Flow, Panel, Phase, PlannedTask, SideSession } from '../types'
 import {
   FONT,
-  GROUPS,
-  JOB_THEME,
-  buildHeaderSvg,
   buildReport,
   countJobs,
   fitText,
-  fmtDay,
-  jobCardSvg,
-  labelOf,
   mergeBuild,
-  nowNext,
-  prLineSvg,
-  runsOf,
   slug,
-  summaryLine,
   textWidth,
   xml,
 } from './jobs'
-import type { JobsInput, RunLine } from './jobs'
+import type { JobsInput } from './jobs'
 import { GLASS, GLASS_CSS, glassBar, glassDefs, glassPanel, glowOnly } from './glass'
 
 const flow = atom({ plugin: 'savvy-progress', key: 'flow' } as const, null)
@@ -95,17 +85,8 @@ const STRINGS = {
     open: 'Open chat ↗',
     view: 'View transcript',
     states: { blocked: 'needs you', review_ready: 'ready for review', completed: 'done' } as Record<string, string>,
-    groups: { running: 'Running', waiting: 'Waiting on something', planned: 'Planned', later: 'Later', shipped: 'Shipped' } as Record<string, string>,
-    tiles: ['Shipped', 'Running', 'Waiting', 'To do'] as [string, string, string, string],
-    updated: 'Updated',
-    waitingOn: 'Waiting on:',
-    more: 'more',
-    memo: 'Build memo ↗',
     jobsWord: 'Jobs',
     doneWord: 'done',
-    noJobs: 'No jobs yet.',
-    nowWord: 'Now',
-    nextWord: 'Next',
     refresh: 'Refresh',
     otherChat: 'other chat',
     showAll: 'All chats',
@@ -145,17 +126,8 @@ const STRINGS = {
     open: 'Открыть чат ↗',
     view: 'Транскрипт',
     states: { blocked: 'ждёт тебя', review_ready: 'на проверку', completed: 'готово' } as Record<string, string>,
-    groups: { running: 'В работе', waiting: 'Чего-то ждут', planned: 'Запланированы', later: 'Позже', shipped: 'Выпущены' } as Record<string, string>,
-    tiles: ['Выпущено', 'В работе', 'Ждут', 'Впереди'] as [string, string, string, string],
-    updated: 'Обновлено',
-    waitingOn: 'Ждёт:',
-    more: 'ещё',
-    memo: 'Мемо сборки ↗',
     jobsWord: 'Задачи',
     doneWord: 'готово',
-    noJobs: 'Задач пока нет.',
-    nowWord: 'Сейчас',
-    nextWord: 'Дальше',
     refresh: 'Обновить',
     otherChat: 'другой чат',
     showAll: 'Все чаты',
@@ -259,19 +231,12 @@ const barText = (r: number, width: number): string => {
 // Build jobs (Marc): the list lives in ~/.claude/savvy-progress/builds/<id>.json, so
 // every session, a resumed orchestrator included, reads the same build.
 
-const JOB_COLORS = JOB_THEME.status
-// Pane width, CSS px, from which jobs and agents sit side by side; the gap between them.
-// Marc: the narrowest a column may be with its text still easy to read.
-const MIN_COL = 320
 // bodyColumns counts the pane's code-font cells, measured at about 9.3px. Drawings are made at a
 // slightly larger cell and given no size, so the app fits each one to its column: they always fill
 // it (shrunk a few percent at most), never leave a gap at the right or run past the edge.
 // Marc (2026-11-23, seen in a capture of the app): at 9.6 a wide pane drew narrower than its
 // column, leaving more room on the right than the left. Made wider, a drawing is always shrunk to fit.
 const PANE_CELL_PX = 10.4
-// What one of bodyColumns' cells really measures in the pane, so a drawing shown at its own size
-// (not shrunk to the column) can match the shrunk ones.
-const PANE_CELL_REAL = 9.3
 // Marc: every pane drawing is a plain image. A hoverable (isInteractive) frame keeps its drawn
 // height while the app shrinks the picture to the column, which left uneven gaps above and below.
 
@@ -284,17 +249,10 @@ const GLASS_FILL = '#8080800d'
 const GLASS_SHEEN = `<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="40" viewBox="0 0 2400 40"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".14"/><stop offset=".6" stop-color="#fff" stop-opacity=".03"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="r" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".35" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity=".28"/></linearGradient></defs><rect width="2400" height="40" fill="url(#s)"/><rect width="2400" height="1" fill="url(#r)"/></svg>`
 // The band's bodyColumns counts cells of the app's code font, about 8px; taken a little smaller to stay safe.
 const BAND_CELL_PX = 7.4
-const COL_GAP_PX = 16
-// Marc: the glimmer on a hovered job card: a soft band of light sweeping left to right every 2.6s,
-// drawn wide and tall and clipped by the card's box, so it needs no measure of the card.
 // Marc (seen in a capture of the app): an absolute Box sizes itself to its parent, and the app caps
 // a drawing at its box's width, so a wide drawing (the band's beam, a sheen) was squeezed to a
 // sliver and never showed. Such a box gets a width of its own, in cells, wider than any drawing.
 const WIDE_CELLS = 320
-const SPACER = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="10" viewBox="0 0 1 10"></svg>'
-const GLIMMER_W = 1400
-const GLIMMER_H = 400
-const GLIMMER = `<svg xmlns="http://www.w3.org/2000/svg" width="${GLIMMER_W}" height="${GLIMMER_H}" viewBox="0 0 ${GLIMMER_W} ${GLIMMER_H}"><style>.gm{animation:gm 2.6s cubic-bezier(.4,0,.2,1) infinite}@keyframes gm{0%{transform:translateX(-160px)}45%,100%{transform:translateX(1100px)}}@media (prefers-reduced-motion:reduce){.gm{animation:none;opacity:0}}</style><defs><linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><g class="gm"><rect x="0" y="-100" width="90" height="${GLIMMER_H + 200}" fill="url(#gl)" transform="skewX(-20)"/></g></svg>`
 
 const buildsDir = async ($: EngineInterface): Promise<string> => `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/builds`
 
@@ -523,16 +481,6 @@ async function refreshBuild($: EngineInterface): Promise<void> {
   if (disk && disk.updatedAt !== cur.updatedAt) await update($, build, () => disk)
 }
 
-// What a job card says about each agent working on it.
-const runLines = (runs: readonly AgentRun[], at: number): RunLine[] =>
-  runs.map(r => {
-    const s = tr()
-    const state = r.note || (r.status === 'running' ? s.isRunning : r.status === 'done' ? s.isFinished : r.status === 'failed' ? s.failed : s.states.blocked)
-    return { name: r.name || r.description || r.type, status: r.status, state: state ?? '', stats: `≈${fmtCost(r.costUsd)} · ${fmtTime(elapsed(r, at))}` }
-  })
-
-// The coach beside a build's name, running the team.
-const coachBadge = (isWorking: boolean) => ({ svg: crab(0, -1, 'coach', false, isWorking, 1), css: CRAB_CSS, w: 36 })
 
 
 // ---------------------------------------------------------------------------
@@ -1262,7 +1210,7 @@ export const register: Register = (on, options) => {
     await $.tool.register({
       name: 'jobs',
       description:
-        'Report a multi-job build (each job = one PR) to the jobs view beside the agents panel and to the band above the prompt. ' +
+        'Report a multi-job build (each job = one PR) to the band above the prompt and the savvy board window (the Agents pane shows agents only). ' +
         'The list is kept in a file per build, so any later session can read it back: call with only `build` to load it and get the list. ' +
         'Call it: when a multi-job build is planned (seed every job from the build memo, status planned or later); when a job starts (running, with its side session names or local_ ids in `sessions`); ' +
         'when one is blocked (waiting, with `waitingOn`: who or what, in a few words); when its PR opens (pr, prUrl) and when it merges (shipped); and once with finished: true at the end. ' +
@@ -1557,13 +1505,12 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const s = tr()
     const ui = $.ui.resolve(e)
-    const { Box, Text, Button, Link } = ui
+    const { Box, Text, Button } = ui
     const wide = await everyRun($)
     const list = wide.filter(a => !a.isOutside)
     // Marc: other chats and other sessions' agents, listed only on request and never in the totals.
     const outside = wide.filter(a => a.isOutside).reverse()
     const f = await read($, flow)
-    const b = await read($, build)
     const p: Panel = await read($, panel)
     // A row that leads somewhere carries a press: its session's chat, or a subagent's transcript.
     // Another session's subagent has no transcript this session can open.
@@ -1586,7 +1533,7 @@ export const register: Register = (on, options) => {
     // The fullest set that fits: every word; then Collapse as its icon alone; then icons only.
     const paneCols = e.props.bodyColumns || 40
     const fits = (words: string[]) => words.join('').length * 0.8 + words.length * 2 + 3 * 2 + 2 <= paneCols
-    const all = [b ? 'Swap' : '', s.collapse, s.allShort, s.refresh].filter(Boolean)
+    const all = [s.collapse, s.allShort, s.refresh]
     const dropped = fits(all) ? new Set<string>() : fits(all.filter(w => w !== s.collapse && w !== s.expand)) ? new Set([s.collapse, s.expand]) : new Set(all.concat(s.expand, s.buildOnly))
     const iconLabel = (icon: string, word: string) => (dropped.has(word) ? icon : `${icon} ${word}`)
     const toggleCompact = (
@@ -1613,30 +1560,17 @@ export const register: Register = (on, options) => {
         onPress={() => update($, panel, prev => ({ ...prev, isDoneCollapsed: !prev.isDoneCollapsed }))}
       />
     )
-    const toggleShipped = (n: number) => (
-      <Button
-        key="shipped"
-        label={`${p.isShippedCollapsed ? '▸' : '▾'} ${s.groups.shipped} · ${n}`}
-        plain
-        onPress={() => update($, panel, prev => ({ ...prev, isShippedCollapsed: !prev.isShippedCollapsed }))}
-      />
-    )
     const isEmpty = list.length === 0 && planned.length === 0
     const summary = `≈${fmtCost(t.cost)}, ${fmtTokens(t.fresh)} ${s.fresh} ${s.tokensWord} (+${fmtTokens(t.cached)} ${s.cached}), ${fmtTime(t.time)}`
-    const groups = b ? GROUPS.map(g => ({ g, jobs: b.jobs.filter(j => j.status === g) })).filter(x => x.jobs.length) : []
-    // Marc: a file path as the memo is a short link that opens the file, not the whole path.
-    const memoButton = (path: string) => (
-      <Button key="memo" label={`${path.split('/').pop() || s.memo} ↗`} plain onPress={() => void $.process.run(['open', path])} />
-    )
-    const prLink = (j: Job) => (j.prUrl ? <Link key={`pr-${j.id}`} href={j.prUrl} label={`PR ${j.pr ?? ''} ↗`.replace('  ', ' ')} /> : null)
 
+    // Marc (Nov 23): the pane shows agents only. Build jobs live in the tracker artifact; the band
+    // and the savvy board still read the build file the `jobs` tool writes.
     if (e.surface === 'desktop' && 'Svg' in ui) {
       const { Svg } = ui
       // Marc: a card glows in its colour only under the pointer. The card is keyed, so it is the
       // hover scope; the glow layer on top of it is hidden until then and has no key of its own.
       // The layer spans the card's width, so the app fits both drawings to the same size.
-      // `inside`, drawn last so it stays pressable over the glow: a link laid on the card's bottom.
-      const glowCard = (key: string, source: string, alt: string, tint: string, inside?: ReturnType<typeof prLink>) => {
+      const glowCard = (key: string, source: string, alt: string, tint: string) => {
         const [gw, gh] = sizeOf(source)
         return (
           <Box key={key} position="relative">
@@ -1644,21 +1578,11 @@ export const register: Register = (on, options) => {
             <Box position="absolute" top={0} left={0} width="100%" display="none" hover={{ display: 'flex' }}>
               <Svg source={glowOnly(gw, gh, tint)} alt="" />
             </Box>
-            {inside ? (
-              <Box position="absolute" bottom={0} left={2}>
-                {inside}
-              </Box>
-            ) : (
-              ''
-            )}
           </Box>
         )
       }
       const W = Math.max(240, Math.min(1400, Math.round((e.props.bodyColumns || 40) * PANE_CELL_PX) - 8))
-      // Marc: side by side wherever both columns stay legible (MIN_COL each), stacked otherwise; no switch.
-      const isWide = Boolean(b) && W >= MIN_COL * 2 + COL_GAP_PX
-      const CW = b ? (isWide ? Math.floor((W - COL_GAP_PX) / 2) : W) : W
-      const AW = Math.min(CW, 900)
+      const AW = Math.min(W, 900)
       const section = (key: string, text: string) => (
         <Text key={key} dimColor>
           {text}
@@ -1668,9 +1592,6 @@ export const register: Register = (on, options) => {
       if (p.isCompact) {
         return (
           <Box flexDirection="column" gap={1}>
-            {b && (
-              <Svg source={buildHeaderSvg(CW, b, { tiles: s.tiles, now: s.nowWord, next: s.nextWord }, coachBadge(running.length > 0)).source} alt={`${b.name}: ${summaryLine(b)}`} />
-            )}
             <Svg source={compactSvg(AW, list, planned, t)} alt={`${list.length} ${s.agentsCount}, ${summary}`} />
             {toggleCompact}
           </Box>
@@ -1679,15 +1600,14 @@ export const register: Register = (on, options) => {
       // Marc: the pane's controls on one row at the top, small, each with its icon; never two lines.
       const controls = (
         <Box key="pane-controls" flexDirection="row" flexWrap="nowrap" overflow="hidden" columnGap={2}>
-          {b ? <Button key="layout-swap" label={iconLabel(isWide ? '⇄' : '⇅', 'Swap')} plain onPress={() => update($, panel, prev => ({ ...prev, isAgentsFirst: !prev.isAgentsFirst }))} /> : null}
           {toggleCompact}
           {toggleAll}
           {refreshButton}
         </Box>
       )
-      const agentsColumn = (
-        <Box key="agents-col" flexDirection="column" gap={1} {...(isWide ? { width: 0, flexGrow: 1, minWidth: 0 } : {})}>
-          {!b && controls}
+      return (
+        <Box key="agents-col" flexDirection="column" gap={1}>
+          {controls}
           <Svg source={headerSvg(AW, title, t, running.length > 0)} alt={title ? `${title}: ${summary}` : summary} />
           {isEmpty && <Text dimColor>{s.empty}</Text>}
           {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
@@ -1711,61 +1631,6 @@ export const register: Register = (on, options) => {
               glowCard(`o-${a.id}`, agentSvg(AW, a, at), `${a.description}: ${modelName(a.model)}, ${a.status === 'running' ? s.isRunning : s.isFinished}`, tintOf(a)),
               opener(a),
             ])}
-        </Box>
-      )
-      if (!b) return agentsColumn
-
-      const header = buildHeaderSvg(CW, b, { tiles: s.tiles, now: s.nowWord, next: s.nextWord }, coachBadge(running.length > 0))
-      // Marc: a job card is a native box: the drawing holds its text, and the PR link flows beneath
-      // it inside the same box, so the box grows to whatever size the app draws the link at (a link
-      // laid over the drawing by estimate overlapped the text and was cut off). Under the pointer the
-      // edge takes the job's colour and a glimmer sweeps across.
-      const card = (j: Job) => {
-        const tint = JOB_COLORS[j.status]
-        const drawn = jobCardSvg(CW, b, j, runLines(runsOf(j, list), at), { updated: s.updated, waitingOn: s.waitingOn, more: s.more }, { isBare: true, hasLink: Boolean(j.prUrl) })
-        return [
-          <Box key={`job-${j.id}`} position="relative" overflow="hidden" flexDirection="column" borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL} paddingX={1} paddingY={0} hover={{ borderColor: `${tint}8c` }}>
-            <Box position="absolute" top={0} left={0} width={WIDE_CELLS}>
-              <Svg source={GLASS_SHEEN} alt="" width={2400} height={40} />
-            </Box>
-            <Box position="absolute" top={0} left={0} width={WIDE_CELLS} display="none" hover={{ display: 'flex' }}>
-              <Svg source={GLIMMER} alt="" width={GLIMMER_W} height={GLIMMER_H} />
-            </Box>
-            <Svg source={drawn.source} alt={`${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`} />
-            {j.prUrl ? (
-              <Box key={`prrow-${j.id}`} flexDirection="row" alignItems="center" columnGap={1}>
-                <Svg source={prLineSvg(`PR ${j.pr ?? ''}`.trim(), CW * 0.8, PANE_CELL_REAL / PANE_CELL_PX).source} alt={`PR ${j.pr ?? ''}`} />
-                <Link key={`pr-${j.id}`} href={j.prUrl} label="↗" />
-              </Box>
-            ) : (
-              ''
-            )}
-            {/* An exact 10px under the last line: a cell of padding was too much. */}
-            <Svg source={SPACER} alt="" width={1} height={10} />
-          </Box>,
-        ]
-      }
-      const jobsColumn = (
-        <Box key="jobs-col" flexDirection="column" gap={1} {...(isWide ? { width: 0, flexGrow: 1, minWidth: 0 } : {})}>
-          <Svg source={header.source} alt={`${b.name}: ${summaryLine(b)}`} />
-          {b.memo && (/^https?:/.test(b.memo) ? <Link key="memo" href={b.memo} label={s.memo} /> : memoButton(b.memo))}
-          {groups.length === 0 && <Text dimColor>{s.noJobs}</Text>}
-          {groups.flatMap(({ g, jobs }) =>
-            g === 'shipped'
-              ? [toggleShipped(jobs.length), ...(p.isShippedCollapsed ? [] : jobs.flatMap(card))]
-              : [section(`h-${g}`, `${s.groups[g]} · ${jobs.length}`), ...jobs.flatMap(card)],
-          )}
-        </Box>
-      )
-      // Marc: the only control at the top left is Swap.
-      return (
-        <Box flexDirection="column" gap={1}>
-          {controls}
-          <Box flexDirection={isWide ? 'row' : 'column'} flexWrap="nowrap" columnGap={2} rowGap={2} alignItems={isWide ? 'flex-start' : 'stretch'}>
-            {/* Marc: Swap puts the agents first, on top when stacked, on the left side by side. */}
-            {p.isAgentsFirst ? agentsColumn : jobsColumn}
-            {p.isAgentsFirst ? jobsColumn : agentsColumn}
-          </Box>
         </Box>
       )
     }
@@ -1807,82 +1672,8 @@ export const register: Register = (on, options) => {
         </Box>
       )
     }
-    const jobRow = (j: Job) => {
-      const color = JOB_COLORS[j.status]
-      const runs = runLines(runsOf(j, list), at)
-      return (
-        <Box key={`job-${j.id}`} flexDirection="column" marginBottom={1}>
-          <Text wrap="truncate-end">
-            <Text color={color}>▍</Text>
-            <Text dimColor>{labelOf(b as Build, j)} · </Text>
-            <Text bold>{j.title}</Text>
-          </Text>
-          {j.detail && (
-            <Text dimColor wrap="truncate-end">
-              {'  '}
-              {j.detail}
-            </Text>
-          )}
-          {j.waitingOn && (
-            <Text color={JOB_COLORS.waiting} wrap="truncate-end">
-              {'  '}
-              {s.waitingOn} {j.waitingOn}
-            </Text>
-          )}
-          <Text dimColor wrap="truncate-end">
-            {'  '}
-            {s.updated} {fmtDay(j.updated)}
-            {j.pr && !j.prUrl ? ` · PR ${j.pr}` : ''}
-          </Text>
-          {prLink(j)}
-          {runs.map(r => (
-            <Text key={`${j.id}-${r.name}`} dimColor wrap="truncate-end">
-              {'  '}
-              <Text color={r.status === 'running' ? JOB_COLORS.running : r.status === 'done' ? JOB_COLORS.shipped : JOB_COLORS.waiting}>●</Text> {r.name} · {r.state}
-              {r.stats ? ` · ${r.stats}` : ''}
-            </Text>
-          ))}
-        </Box>
-      )
-    }
-
     return (
       <Box flexDirection="column">
-        {b && (
-          <Box flexDirection="column" marginBottom={1}>
-            <Text bold wrap="truncate-end">
-              {b.name}
-            </Text>
-            <Text wrap="truncate-end">{summaryLine(b)}</Text>
-            {nowNext(b).now && (
-              <Text wrap="truncate-end">
-                <Text color={JOB_COLORS.running}>{s.nowWord} </Text>
-                <Text dimColor>{nowNext(b).now}</Text>
-              </Text>
-            )}
-            {nowNext(b).next && (
-              <Text wrap="truncate-end">
-                <Text color={JOB_COLORS.planned}>{s.nextWord} </Text>
-                <Text dimColor>{nowNext(b).next}</Text>
-              </Text>
-            )}
-            <Text wrap="truncate-end">
-              {GROUPS.map(g => (
-                <Text key={`bar-${g}`} color={JOB_COLORS[g]}>
-                  {'█'.repeat(Math.round((Math.max(10, cols - 4) * countJobs(b)[g]) / Math.max(1, b.jobs.length)))}
-                </Text>
-              ))}
-            </Text>
-            {b.memo && (/^https?:/.test(b.memo) ? <Link key="memo" href={b.memo} label={s.memo} /> : <Text dimColor>{b.memo}</Text>)}
-            {!p.isCompact &&
-              groups.map(({ g, jobs }) => (
-                <Box key={`g-${g}`} flexDirection="column" marginTop={1}>
-                  {g === 'shipped' ? toggleShipped(jobs.length) : <Text dimColor>{s.groups[g]} · {jobs.length}</Text>}
-                  {g === 'shipped' && p.isShippedCollapsed ? null : jobs.map(jobRow)}
-                </Box>
-              ))}
-          </Box>
-        )}
         <Box flexDirection="row" justifyContent="space-between">
           <Text bold wrap="truncate-end">
             {title}
