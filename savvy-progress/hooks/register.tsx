@@ -473,6 +473,22 @@ async function refreshNow($: EngineInterface): Promise<void> {
   await update($, now, () => at)
 }
 
+// Marc: the band's 🔍 and ↻ open the savvy board (savvy-board/ in this repo), a desktop window that
+// lives apart from any session, so it keeps working after /reload-plugins left this pane dead. The
+// board's server writes where its launcher is to ~/.claude/savvy-progress/board.json each time it
+// starts; with no such file (board never run) the buttons open the pane as before.
+async function openBoard($: EngineInterface, isRefresh = false): Promise<boolean> {
+  try {
+    const home = (await $.env.get('HOME')) || '~'
+    const d = JSON.parse(String(await $.fs.read(`${home}/.claude/savvy-progress/board.json`))) as { start?: unknown }
+    if (typeof d.start !== 'string' || !d.start.endsWith('/savvy-board/start-board.sh')) return false
+    const { exitCode } = await $.process.run(['/bin/zsh', d.start, ...(isRefresh ? ['--refresh'] : [])], { timeoutMs: 20_000 })
+    return exitCode === 0
+  } catch {
+    return false
+  }
+}
+
 function kick($: EngineInterface): void {
   startTimers($)
   void ensureBuild($).catch(() => undefined)
@@ -1957,18 +1973,18 @@ export const register: Register = (on, options) => {
     if (!bar) return next(e)
     const percent = `${Math.round(bar.ratio * 100)}%`
 
-    // Marc: the magnifier says the count opens the agents panel.
-    const crewButton = <Button key="savvy-agents" label={`🔍 ×${crew}`} plain onPress={() => void togglePane($)} />
-    // Marc: refresh where it always works: the band draws even when the pane doesn't. It reopens the
-    // pane drawn fresh by this copy of the mod and re-reads everything.
+    // Marc: the magnifier opens the savvy board window (the pane when the board isn't set up).
+    const crewButton = <Button key="savvy-agents" label={`🔍 ×${crew}`} plain onPress={async () => void ((await openBoard($)) || (await togglePane($)))} />
+    // Marc: refresh where it always works: the band draws even when the pane doesn't. It re-reads
+    // everything, then brings up the board window and has it re-read too (else reopens the pane).
     const bandRefresh = (
       <Button
         key="savvy-refresh"
         label="↻"
         plain
         onPress={async () => {
-          await reopenPane($)
           await refreshNow($)
+          if (!(await openBoard($, true))) await reopenPane($)
         }}
       />
     )
