@@ -23,11 +23,12 @@ export const JOB_THEME = {
   } as Record<JobStatus, string>,
   failed: '#D0453F',
   pad: 12,
-  size: { label: 10.5, title: 13.5, body: 11.5, agent: 11, header: 14, summary: 12, tileKey: 10.5, tileValue: 17 },
-  line: { title: 18, body: 15.5, agent: 17 },
+  // Marc: sizes close to the app's own text (a PR link beside them reads the same size).
+  size: { label: 12, title: 16, body: 14, agent: 13, header: 16, summary: 13.5, tileKey: 12.5, tileValue: 20 },
+  line: { title: 21, body: 19, agent: 20 },
   maxLines: { title: 2, detail: 3, waiting: 2, summary: 3 },
   maxAgents: 4,
-  tileH: 50,
+  tileH: 58,
   barH: 10,
 }
 
@@ -291,9 +292,9 @@ export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, str
   const parts: string[] = []
   const nx = badge ? badge.w : 0
   if (badge) parts.push(badge.css, badge.svg)
-  y += 21
+  y += 22
   parts.push(txt(nx, y, T.size.header, fitText(b.name, T.size.header, W - nx), 'class="t" font-weight="600"'))
-  y += 20
+  y += 22
   parts.push(txt(0, y, T.size.summary, fitText(summaryLine(b), T.size.summary, W), 'class="t"'))
   const nn = nowNext(b)
   const rows: [string, string, string][] = [
@@ -325,9 +326,9 @@ export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, str
     const x = I + i * (tw + gap)
     parts.push(
       glassPanel(x, y, tw, T.tileH, { r: GLASS.tileRadius, tint: color, isQuiet: v === 0 }),
-      `<circle cx="${x + 13}" cy="${y + 15}" r="3.5" fill="${color}"/>`,
-      txt(x + 21, y + 18.5, T.size.tileKey, fitText(k, T.size.tileKey, tw - 28), 'class="s"'),
-      txt(x + 11, y + 40, T.size.tileValue, String(v), 'class="t" font-weight="600" font-variant-numeric="tabular-nums"'),
+      `<circle cx="${x + 14}" cy="${y + 17}" r="3.5" fill="${color}"/>`,
+      txt(x + 22, y + 21, T.size.tileKey, fitText(k, T.size.tileKey, tw - 30), 'class="s"'),
+      txt(x + 12, y + 47, T.size.tileValue, String(v), 'class="t" font-weight="600" font-variant-numeric="tabular-nums"'),
     )
   })
   y += T.tileH + 12
@@ -347,12 +348,13 @@ export const buildHeaderSvg = (W: number, b: Build, words: { tiles: [string, str
 export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[], words: { updated: string; waitingOn: string; more: string }, opts: { isBare?: boolean; hasLink?: boolean } = {}): Drawn => {
   const T = JOB_THEME
   const color = T.status[j.status]
-  const I = GLASS.inset
-  const x0 = I + T.pad + 2
-  const xr = W - I - T.pad
+  // A bare body sits in the pane's own padded box: almost no room of its own, or the two add up.
+  const I = opts.isBare ? 0 : GLASS.inset
+  const x0 = opts.isBare ? 1 : I + T.pad + 2
+  const xr = opts.isBare ? W - 1 : W - I - T.pad
   const inner = xr - x0
   const parts: string[] = []
-  let y = I + T.pad + 9
+  let y = opts.isBare ? 20 : I + T.pad + 11
   const date = `${words.updated} ${fmtDay(j.updated)}`
   const dateW = textWidth(date, T.size.label) + 8
   parts.push(
@@ -398,7 +400,7 @@ export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[]
       parts.push(txt(x0 + 13, y, T.size.agent, `+${runs.length - T.maxAgents} ${words.more}`, 'class="m"'))
     }
   }
-  const H = Math.ceil(y + (opts.hasLink ? 6 : T.pad + I))
+  const H = Math.ceil(y + (opts.isBare ? 8 : T.pad + I))
   const isQuiet = j.status === 'planned' || j.status === 'later' || j.status === 'shipped'
   return {
     source: svg(W, H, (opts.isBare ? '' : glassPanel(I, I, W - I * 2, H - I * 2, { tint: color, isQuiet })) + parts.join('')),

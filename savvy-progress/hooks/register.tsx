@@ -274,11 +274,11 @@ const streaks = (period: number): string => {
 }
 
 const LASER_BEAM = `<svg xmlns="http://www.w3.org/2000/svg" width="${LASER_W}" height="${LASER_H}" viewBox="0 0 ${LASER_W} ${LASER_H}"><defs>
-<linearGradient id="b" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1E0B4B"/><stop offset=".6" stop-color="#2E1065"/><stop offset=".82" stop-color="#4C1D95"/><stop offset=".93" stop-color="#7C3AED"/><stop offset=".99" stop-color="#C4B5FD"/><stop offset="1" stop-color="#EDE9FE"/></linearGradient>
+<linearGradient id="b" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#2E1065"/><stop offset=".12" stop-color="#4C1D95"/><stop offset=".3" stop-color="#7C3AED"/><stop offset=".55" stop-color="#9F7AEA"/><stop offset="1" stop-color="#A78BFA"/></linearGradient>
 <linearGradient id="w" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E9D5FF" stop-opacity="0"/><stop offset=".5" stop-color="#E9D5FF" stop-opacity=".22"/><stop offset="1" stop-color="#E9D5FF" stop-opacity="0"/></linearGradient>
 <linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".45"/><stop offset=".3" stop-color="#000" stop-opacity="0"/><stop offset=".7" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>
 <filter id="cb" x="-1%" y="-100%" width="102%" height="300%"><feGaussianBlur stdDeviation="1.6"/></filter>
-<linearGradient id="c" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F5F3FF" stop-opacity=".35"/><stop offset=".75" stop-color="#FAF5FF" stop-opacity=".8"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="1"/></linearGradient>
+<linearGradient id="c" x1="0" y1="0" x2="${LASER_W}" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#F5F3FF" stop-opacity=".4"/><stop offset=".25" stop-color="#FAF5FF" stop-opacity=".85"/><stop offset="1" stop-color="#FFFFFF" stop-opacity=".9"/></linearGradient>
 <radialGradient id="h" cx="1" cy=".5" r="1"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".35" stop-color="#DDD6FE" stop-opacity=".6"/><stop offset="1" stop-color="#A78BFA" stop-opacity="0"/></radialGradient>
 </defs><style>
 .flow{animation:flow 6s linear infinite}@keyframes flow{to{transform:translateX(240px)}}
@@ -292,11 +292,10 @@ const LASER_BEAM = `<svg xmlns="http://www.w3.org/2000/svg" width="${LASER_W}" h
 <rect width="${LASER_W}" height="${LASER_H}" fill="url(#b)"/>
 ${streaks(240)}
 <rect width="${LASER_W}" height="${LASER_H}" fill="url(#v)"/>
-<rect class="hum" x="0" y="${LASER_H / 2 - 4}" width="${LASER_W}" height="8" rx="4" fill="url(#c)" filter="url(#cb)" opacity=".55"/>
+<rect class="hum" x="0" y="${LASER_H / 2 - 4}" width="${LASER_W}" height="8" rx="4" fill="url(#c)" filter="url(#cb)" opacity=".4"/>
 <rect x="0" y="${LASER_H / 2 - 1.5}" width="${LASER_W}" height="3" rx="1.5" fill="url(#c)"/>
 ${pixelLayer('slow', 160, 7, 7, 2)}
 ${pixelLayer('fast', 120, 4, 31, 1.5)}
-<rect class="head" x="${LASER_W - 36}" y="0" width="36" height="${LASER_H}" fill="url(#h)"/>
 </svg>`
 
 // What leaves the head: a soft halo past the tip and pixels that drift off and fade.
@@ -312,7 +311,7 @@ const LASER_SPARKS = (() => {
 @keyframes spark{0%{transform:translate(0,0);opacity:0}8%{opacity:.95}100%{transform:translate(${SPARKS_W - 6}px,var(--dy));opacity:0}}
 .halo{animation:halo 3.2s ease-in-out infinite}@keyframes halo{50%{opacity:.55}}
 @media (prefers-reduced-motion:reduce){rect,.halo{animation:none!important}}
-</style><ellipse class="halo" cx="0" cy="${LASER_H / 2}" rx="${SPARKS_W * 0.45}" ry="${LASER_H / 2}" fill="url(#g)"/>${sparks}</svg>`
+</style><ellipse class="halo" cx="0" cy="${LASER_H / 2}" rx="${SPARKS_W * 0.4}" ry="${LASER_H / 2}" fill="url(#g)"/><ellipse cx="0" cy="${LASER_H / 2}" rx="4" ry="2.2" fill="#FFFFFF" opacity=".9"/>${sparks}</svg>`
 })()
 
 const barText = (r: number, width: number): string => {
@@ -331,7 +330,9 @@ const MIN_COL = 320
 // bodyColumns counts the pane's code-font cells, measured at about 9.3px. Drawings are made at a
 // slightly larger cell and given no size, so the app fits each one to its column: they always fill
 // it (shrunk a few percent at most), never leave a gap at the right or run past the edge.
-const PANE_CELL_PX = 9.6
+// Marc (2026-11-23, seen in a capture of the app): at 9.6 a wide pane drew narrower than its
+// column, leaving more room on the right than the left. Made wider, a drawing is always shrunk to fit.
+const PANE_CELL_PX = 10.4
 // Marc: every pane drawing is a plain image. A hoverable (isInteractive) frame keeps its drawn
 // height while the app shrinks the picture to the column, which left uneven gaps above and below.
 
@@ -347,6 +348,7 @@ const BAND_CELL_PX = 7.4
 const COL_GAP_PX = 16
 // Marc: the glimmer on a hovered job card: a soft band of light sweeping left to right every 2.6s,
 // drawn wide and tall and clipped by the card's box, so it needs no measure of the card.
+const SPACER = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="10" viewBox="0 0 1 10"></svg>'
 const GLIMMER_W = 1400
 const GLIMMER_H = 400
 const GLIMMER = `<svg xmlns="http://www.w3.org/2000/svg" width="${GLIMMER_W}" height="${GLIMMER_H}" viewBox="0 0 ${GLIMMER_W} ${GLIMMER_H}"><style>.gm{animation:gm 2.6s cubic-bezier(.4,0,.2,1) infinite}@keyframes gm{0%{transform:translateX(-160px)}45%,100%{transform:translateX(1100px)}}@media (prefers-reduced-motion:reduce){.gm{animation:none;opacity:0}}</style><defs><linearGradient id="gl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".12"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><g class="gm"><rect x="0" y="-100" width="90" height="${GLIMMER_H + 200}" fill="url(#gl)" transform="skewX(-20)"/></g></svg>`
@@ -1037,19 +1039,24 @@ const headerSvg = (W: number, title: string, t: ReturnType<typeof totals>, isWor
   const y = top + GI
   const tile = (i: number, k: string, v: string) => {
     const x = GI + i * (tw + gap)
-    return `${glassPanel(x, y, tw, 46, { r: GLASS.tileRadius, tint: TILE_TINTS[i] })}
-<text class="s" x="${x + 11}" y="${y + 17}" font-family="${FONT}" font-size="11">${k}</text>
-<text class="t" x="${x + 11}" y="${y + 36}" font-family="${FONT}" font-size="15" font-weight="600" font-variant-numeric="tabular-nums">${v}</text>`
+    // Marc: bigger figures with room around them; the cached count follows the value only where it fits.
+    const extra = i === 1 && t.cached ? `+${fmtTokens(t.cached)} ${s.cached}` : ''
+    const vx = x + 13 + textWidth(v, 19) + 7
+    const hasExtra = extra && vx + textWidth(extra, 11.5) <= x + tw - 12
+    return `${glassPanel(x, y, tw, TILE_H, { r: GLASS.tileRadius, tint: TILE_TINTS[i] })}
+<text class="s" x="${x + 13}" y="${y + 20}" font-family="${FONT}" font-size="12.5">${xml(fitText(k, 12.5, tw - 26))}</text>
+<text class="t" x="${x + 13}" y="${y + 44}" font-family="${FONT}" font-size="19" font-weight="600" font-variant-numeric="tabular-nums">${v}</text>${hasExtra ? `<text class="m" x="${vx}" y="${y + 44}" font-family="${FONT}" font-size="11.5" font-variant-numeric="tabular-nums">${extra}</text>` : ''}`
   }
   return svg(
     W,
     headerHeight(title),
     `${title ? `${crab(0, 0, 'coach', false, isWorking, 1)}<text class="t" x="36" y="21" font-family="${FONT}" font-size="14" font-weight="600">${xml(fitText(title, 14, W - 36))}</text>` : ''}
-${tile(0, s.cost, '≈' + fmtCost(t.cost))}${tile(1, s.tokens, fmtTokens(t.fresh))}${t.cached && tw > 120 ? `<text class="m" x="${GI + 2 * tw + gap - 10}" y="${y + 36}" text-anchor="end" font-family="${FONT}" font-size="10.5" font-variant-numeric="tabular-nums">+${fmtTokens(t.cached)} ${s.cached}</text>` : ''}${tile(2, s.time, fmtTime(t.time))}`,
+${tile(0, s.cost, '≈' + fmtCost(t.cost))}${tile(1, s.tokens, fmtTokens(t.fresh))}${tile(2, s.time, fmtTime(t.time))}`,
   )
 }
 
-const headerHeight = (title: string): number => (title ? 36 : 0) + 46 + GI * 2
+const TILE_H = 56
+const headerHeight = (title: string): number => (title ? 36 : 0) + TILE_H + GI * 2
 
 // The task's own progress when the worker reports steps; a finished run is full.
 const progressOf = (a: AgentRun): number | null => {
@@ -1060,7 +1067,7 @@ const progressOf = (a: AgentRun): number | null => {
 
 const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0)
 
-const AGENT_H = 76
+const AGENT_H = 88
 const PLANNED_H = 54
 const COMPACT_H = 42
 
@@ -1073,34 +1080,35 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const ctx = ctxOf(a)
   const ox = GI + 10
   const tx = ox + 42
-  const textW = W - tx - GI - 24
+  const textW = W - tx - GI - 26
   const meta = [a.effort ? `${modelName(a.model)} · ${a.effort}` : modelName(a.model)]
   if (a.round > 1) meta.push(`${s.round} ${a.round}`)
   if (a.status === 'failed') meta.push(s.failed)
   if (a.note) meta.push(a.note)
-  const barW = textW
+  // Marc: the bar runs to the card's right edge, matching the room on its left.
+  const barW = W - tx - GI - 14
   const progress = progressOf(a)
   const stats = `ctx ${ctx}% · ${fmtTokens(a.contextTokens)}  ≈${fmtCost(a.costUsd)}  ${fmtTime(elapsed(a, at))}`
   const steps = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' · ' + a.stepNote : ''}` : ''
   // Marc: every line starts at the left edge; the steps follow the figures on the same line.
-  const statsW = textWidth(stats, 11)
+  const statsW = textWidth(stats, 12)
   const stepsW = Math.max(0, barW - statsW - 14)
   // Without reported steps the bar falls back to the context, drawn grey.
   const fill = progress ?? ctx / 100
   const isAsleep = a.status === 'done'
   const zs = isAsleep
-    ? `<text class="s zz" x="${ox + 20}" y="25" font-family="${FONT}" font-size="8" font-weight="700">z</text><text class="s zz zz2" x="${ox + 26}" y="20" font-family="${FONT}" font-size="10" font-weight="700">z</text>`
+    ? `<text class="s zz" x="${ox + 20}" y="29" font-family="${FONT}" font-size="8" font-weight="700">z</text><text class="s zz zz2" x="${ox + 26}" y="24" font-family="${FONT}" font-size="10" font-weight="700">z</text>`
     : ''
   return svg(
     W,
     AGENT_H,
     `${glassPanel(GI, GI, W - GI * 2, AGENT_H - GI * 2, { tint: color, isQuiet: a.status !== 'running' })}
-${crab(ox, 20, `${costume}#${jerseyOf(a.id)}`, false, a.status === 'running', CRAB_SCALE, isAsleep)}${zs}
-<text class="t" x="${tx}" y="${GI + 20}" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
-<text x="${tx}" y="${GI + 36}" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tier)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
-<text class="s" x="${tx}" y="${GI + 51}" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
-${steps && stepsW > 30 ? `<text class="t" x="${tx + statsW + 14}" y="${GI + 51}" font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
-${glassBar(tx, GI + 57, barW, 6, [{ w: Math.round(barW * fill), color: progress === null ? '#9a9a96' : color }])}
+${crab(ox, 24, `${costume}#${jerseyOf(a.id)}`, false, a.status === 'running', CRAB_SCALE, isAsleep)}${zs}
+<text class="t" x="${tx}" y="${GI + 22}" font-family="${FONT}" font-size="14.5" font-weight="600">${xml(fitText(a.description || a.type, 14.5, textW))}</text>
+<text x="${tx}" y="${GI + 41}" font-family="${FONT}" font-size="12.5"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tier)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
+<text class="s" x="${tx}" y="${GI + 59}" font-family="${FONT}" font-size="12" font-variant-numeric="tabular-nums">${stats}</text>
+${steps && stepsW > 30 ? `<text class="t" x="${tx + statsW + 14}" y="${GI + 59}" font-family="${FONT}" font-size="12" font-variant-numeric="tabular-nums">${xml(fitText(steps, 12, stepsW))}</text>` : ''}
+${glassBar(tx, GI + 67, barW, 6, [{ w: Math.round(barW * fill), color: progress === null ? '#9a9a96' : color }])}
 ${statusMark(W - GI - 14, GI + 16, a.status, color)}`,
   )
 }
@@ -1122,7 +1130,7 @@ const plannedSvg = (W: number, p: Planned): string => {
   const color = colorOf(tier)
   const ox = GI + 10
   const tx = ox + 42
-  const textW = W - tx - GI - 24
+  const textW = W - tx - GI - 26
   const meta = [TIER_MODEL[tier] ?? '']
   if (p.after.length) meta.push(`${tr().after} ${p.after.join(', ')}`)
   return svg(
@@ -1696,14 +1704,19 @@ export const register: Register = (on, options) => {
           </Box>
         )
       }
+      // Marc: the pane's controls on one row at the top, wrapping to a second when the pane is narrow.
+      const controls = (
+        <Box key="pane-controls" flexDirection="row" flexWrap="wrap" columnGap={2}>
+          {b ? <Button key="layout-swap" label={isWide ? '⇄ Swap' : '⇅ Swap'} plain onPress={() => update($, panel, prev => ({ ...prev, isAgentsFirst: !prev.isAgentsFirst }))} /> : null}
+          {toggleCompact}
+          {toggleAll}
+          {refreshButton}
+        </Box>
+      )
       const agentsColumn = (
         <Box key="agents-col" flexDirection="column" gap={1} {...(isWide ? { width: 0, flexGrow: 1, minWidth: 0 } : {})}>
+          {!b && controls}
           <Svg source={headerSvg(AW, title, t, running.length > 0)} alt={title ? `${title}: ${summary}` : summary} />
-          <Box key="pane-controls" flexDirection="row" columnGap={2}>
-            {toggleCompact}
-            {toggleAll}
-            {refreshButton}
-          </Box>
           {isEmpty && <Text dimColor>{s.empty}</Text>}
           {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
           {running.flatMap(a => [
@@ -1739,7 +1752,7 @@ export const register: Register = (on, options) => {
         const tint = JOB_COLORS[j.status]
         const drawn = jobCardSvg(CW, b, j, runLines(runsOf(j, list), at), { updated: s.updated, waitingOn: s.waitingOn, more: s.more }, { isBare: true, hasLink: Boolean(j.prUrl) })
         return [
-          <Box key={`job-${j.id}`} position="relative" overflow="hidden" flexDirection="column" borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL} hover={{ borderColor: tint }}>
+          <Box key={`job-${j.id}`} position="relative" overflow="hidden" flexDirection="column" borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL} paddingX={1} paddingY={0} hover={{ borderColor: `${tint}8c` }}>
             <Box position="absolute" top={0} left={0}>
               <Svg source={GLASS_SHEEN} alt="" width={2400} height={40} />
             </Box>
@@ -1747,13 +1760,9 @@ export const register: Register = (on, options) => {
               <Svg source={GLIMMER} alt="" width={GLIMMER_W} height={GLIMMER_H} />
             </Box>
             <Svg source={drawn.source} alt={`${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`} />
-            {j.prUrl ? (
-              <Box paddingLeft={1} paddingBottom={1}>
-                {prLink(j)}
-              </Box>
-            ) : (
-              ''
-            )}
+            {j.prUrl ? prLink(j) : ''}
+            {/* An exact 10px under the last line: a cell of padding was too much. */}
+            <Svg source={SPACER} alt="" width={1} height={10} />
           </Box>,
         ]
       }
@@ -1772,9 +1781,7 @@ export const register: Register = (on, options) => {
       // Marc: the only control at the top left is Swap.
       return (
         <Box flexDirection="column" gap={1}>
-          <Box key="layout" flexDirection="row" justifyContent="flex-start">
-            <Button key="layout-swap" label={isWide ? '⇄ Swap' : '⇅ Swap'} plain onPress={() => update($, panel, prev => ({ ...prev, isAgentsFirst: !prev.isAgentsFirst }))} />
-          </Box>
+          {controls}
           <Box flexDirection={isWide ? 'row' : 'column'} flexWrap="nowrap" columnGap={2} rowGap={2} alignItems={isWide ? 'flex-start' : 'stretch'}>
             {/* Marc: Swap puts the agents first, on top when stacked, on the left side by side. */}
             {p.isAgentsFirst ? agentsColumn : jobsColumn}
@@ -2038,12 +2045,13 @@ export const register: Register = (on, options) => {
                 the tip live in the empty track beside it. Both sources are constant, so a redraw
                 never restarts the motion. */}
             <Box key="laser-track" width="100%" height={1} flexDirection="row" backgroundColor="#80808026">
-              {/* Marc: the app ignored an absolute `right` offset, so the drawing's dark tail filled the bar
-                  and it looked empty. The beam now sits in the flow, pushed to the fill's right end
-                  (flex-end, no shrink), its excess clipped off the left; the bar's own colour lies
-                  underneath, so the fill shows even if the drawing doesn't. */}
-              <Box key="laser-fill" width={`${pct}%`} minWidth={0} height={1} flexDirection="row" justifyContent="flex-end" overflow="hidden" backgroundColor={bar.color}>
-                <Box key="laser-beam" flexShrink={0} width={LASER_W}>
+              {/* Marc (seen in a capture of the app): it ignores an absolute `right` offset and squeezes a
+                  drawing placed in the flow to the box's width. Absolute at top/left with its own size,
+                  as the sheen is, is what it draws as made: so the beam runs from the fill's left,
+                  clipped at its end, and the bright tip lives in the strip just past the fill. The
+                  bar's own colour lies underneath, so the fill shows even if the drawing doesn't. */}
+              <Box key="laser-fill" width={`${pct}%`} minWidth={0} height={1} position="relative" overflow="hidden" backgroundColor={bar.color}>
+                <Box key="laser-beam" position="absolute" top={0} left={0}>
                   <Svg key="beam" source={LASER_BEAM} alt="" width={LASER_W} height={LASER_H} />
                 </Box>
               </Box>

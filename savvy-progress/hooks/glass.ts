@@ -49,7 +49,7 @@ export const glassDefs = (id = 'g'): string => `<defs>
 <linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="gs0"/><stop offset="1" class="gs1"/></linearGradient>
 <linearGradient id="${id}w" x1="0" y1="0" x2="1" y2="0"><stop offset="0" class="gsw0"/><stop offset=".5" class="gsw1"/><stop offset="1" class="gsw0"/></linearGradient>
 <filter id="${id}b" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="${GLASS.glowBlur}"/></filter>
-<filter id="${id}sg" x="-5%" y="-200%" width="110%" height="500%"><feGaussianBlur stdDeviation="2.4"/></filter>
+<filter id="${id}sg" x="-5%" y="-200%" width="110%" height="500%"><feGaussianBlur stdDeviation="1.8"/></filter>
 <filter id="${id}d" x="-10%" y="-20%" width="120%" height="160%"><feDropShadow dx="0" dy="${GLASS.shadowY}" stdDeviation="${GLASS.shadowBlur}" class="gsh"/></filter>
 </defs>`
 
@@ -102,9 +102,10 @@ export const glassBar = (x: number, y: number, w: number, h: number, segments: {
   const core = litW > 0 ? `<rect x="${x + r * 0.4}" y="${y + (h - coreH) / 2}" width="${Math.max(0, litW - r * 0.8)}" height="${coreH}" rx="${coreH / 2}" fill="#ffffff" opacity=".9"/>` : ''
   return [
     `<clipPath id="${clip}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}"/></clipPath>`,
-    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" class="k" opacity=".55"/>`,
+    // The empty track, visible on dark and light alike, so a half-done bar reads as half done.
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="#8a8a86" opacity=".28"/>`,
     `<g clip-path="url(#${clip})">${faint.join('')}</g>`,
-    glow.length ? `<g class="hum" filter="url(#${id}sg)" opacity=".8">${glow.join('')}</g>` : '',
+    glow.length ? `<g class="hum" filter="url(#${id}sg)" opacity=".38">${glow.join('')}</g>` : '',
     `<g clip-path="url(#${clip})">${lit.join('')}${core}</g>`,
   ].join('')
 }
@@ -123,5 +124,5 @@ export const glowOnly = (W: number, H: number, tint: string, r = GLASS.radius): 
   const ring = (sw: number, extra: string) => `<rect x="${x}" y="${x}" width="${w}" height="${h}" rx="${r}" fill="none" stroke="${tint}" stroke-width="${sw}" ${extra}/>`
   const band = Math.max(40, w * 0.22)
   const style = `<style>.gm{animation:gm 2.6s cubic-bezier(.4,0,.2,1) infinite}@keyframes gm{0%{transform:translateX(${-band * 1.5}px)}45%,100%{transform:translateX(${W + band}px)}}@media (prefers-reduced-motion:reduce){.gm{animation:none;opacity:0}}</style>`
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${style}<defs><clipPath id="hc"><rect x="${x}" y="${x}" width="${w}" height="${h}" rx="${r}"/></clipPath><filter id="hw" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="3"/></filter><linearGradient id="hg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".16"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><g clip-path="url(#hc)">${ring(8, 'filter="url(#hw)" opacity=".18"')}<g class="gm"><rect x="0" y="${-H}" width="${band}" height="${H * 3}" fill="url(#hg)" transform="skewX(-20)"/></g></g>${ring(0.8, 'opacity=".35"')}</svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${style}<defs><clipPath id="hc"><rect x="${x}" y="${x}" width="${w}" height="${h}" rx="${r}"/></clipPath><filter id="hw" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="3"/></filter><linearGradient id="hg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".16"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><g clip-path="url(#hc)">${ring(9, 'filter="url(#hw)" opacity=".42"')}<g class="gm"><rect x="0" y="${-H}" width="${band}" height="${H * 3}" fill="url(#hg)" transform="skewX(-20)"/></g></g>${ring(1, 'opacity=".55"')}</svg>`
 }
