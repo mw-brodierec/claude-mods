@@ -78,6 +78,8 @@ export type SideSession = {
   cli?: string
   /** Marc: another chat on this machine, active now or lately, not one this session started. */
   isOther?: boolean
+  /** The CLI id of the session that started it; for a build's side session, the orchestrator. */
+  parentCli?: string
 }
 
 export type Panel = {

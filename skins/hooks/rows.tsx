@@ -908,7 +908,10 @@ const GAP_CELLS = 2
 // The light across the top: a wide drawing pinned under everything, clipped by the band's corners.
 export const GLASS_SHEEN = `<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="40" viewBox="0 0 2400 40"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".14"/><stop offset=".6" stop-color="#fff" stop-opacity=".03"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="r" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".35" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity=".28"/></linearGradient></defs><rect width="2400" height="40" fill="url(#s)"/><rect width="2400" height="1" fill="url(#r)"/></svg>`
 
-type BandLayout = { isTight: boolean; isMinimal: boolean; onlyContext: boolean; clawd: boolean }
+// `noCountdown` (Marc): the 5h countdown goes before any dial does.
+type BandLayout = { isTight: boolean; isMinimal: boolean; onlyContext: boolean; clawd: boolean; noCountdown?: boolean }
+
+const withoutCountdowns = (meters: readonly Meter[]): Meter[] => meters.map(({ resets: _resets, ...m }) => m)
 
 // The fullest layout whose parts fit `columns` cells. Exported for the tests.
 export function bandLayout(meters: readonly Meter[], palette: Look['skin']['palette'], columns: number, hasClawd: boolean): BandLayout {
@@ -921,12 +924,13 @@ export function bandLayout(meters: readonly Meter[], palette: Look['skin']['pale
   const tries: BandLayout[] = [
     { isTight: false, isMinimal: false, onlyContext: false, clawd: hasClawd },
     { isTight: true, isMinimal: false, onlyContext: false, clawd: hasClawd },
+    { isTight: true, isMinimal: false, onlyContext: false, clawd: hasClawd, noCountdown: true },
     { isTight: true, isMinimal: false, onlyContext: true, clawd: hasClawd },
     { isTight: true, isMinimal: true, onlyContext: true, clawd: hasClawd },
     { isTight: true, isMinimal: false, onlyContext: true, clawd: false },
   ]
   for (const t of tries) {
-    const dials = usageSvg(t.onlyContext ? contextOnly : meters, palette, t.isTight, t.isMinimal).width
+    const dials = usageSvg(t.onlyContext ? contextOnly : t.noCountdown ? withoutCountdowns(meters) : meters, palette, t.isTight, t.isMinimal).width
     if (width([dials, t.clawd ? CLAWD_W : 0]) <= room) return t
   }
   return { isTight: true, isMinimal: true, onlyContext: true, clawd: false }
@@ -939,9 +943,9 @@ export function usageBand(look: Look, meters: readonly Meter[], clawd?: { isWork
   if (look.surface !== 'terminal' && look.svg !== undefined) {
     const Svg = look.svg
     const fit = bandLayout(meters, palette, columns, clawd !== undefined)
-    const shown = fit.onlyContext ? meters.filter(m => m.label === 'context') : meters
+    const shown = fit.onlyContext ? meters.filter(m => m.label === 'context') : fit.noCountdown ? withoutCountdowns(meters) : meters
     const built = usageSvg(shown, palette, fit.isTight, fit.isMinimal)
-    const tier = fit.isMinimal ? 'min:' : fit.onlyContext ? 'ctx:' : fit.isTight ? 'tight:' : ''
+    const tier = fit.isMinimal ? 'min:' : fit.onlyContext ? 'ctx:' : fit.noCountdown ? 'bare:' : fit.isTight ? 'tight:' : ''
     return (
       <Box key="usage-glass" position="relative" overflow="hidden" flexDirection="row" alignItems="center" justifyContent="space-evenly" columnGap={GAP_CELLS} paddingX={0} borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL}>
         <Box key="sheen" position="absolute" top={0} left={0}>

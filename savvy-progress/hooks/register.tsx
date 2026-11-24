@@ -679,7 +679,9 @@ async function refreshSessions($: EngineInterface): Promise<void> {
     const id = await $.session.id()
     const b = await read($, build)
     const extra = [...new Set((b?.jobs ?? []).flatMap(j => j.sessions).filter(x => x.startsWith('local_')))]
-    const { exitCode, stdout } = await $.process.run(['python3', '-I', `${$.plugin.root}/hooks/sessions.py`, id, '--live', ...extra], { timeoutMs: 20_000 })
+    // "Show all chats" widens the listing from the last 20 minutes to the newest 40 of the week.
+    const scope = (await read($, panel)).isShowingAll ? '--all' : '--live'
+    const { exitCode, stdout } = await $.process.run(['python3', '-I', `${$.plugin.root}/hooks/sessions.py`, id, scope, ...extra], { timeoutMs: 20_000 })
     if (exitCode !== 0) return
     const list = JSON.parse(stdout) as SideSession[]
     const at = await $.clock.now()
@@ -697,7 +699,13 @@ async function refreshSessions($: EngineInterface): Promise<void> {
 // Marc: only the build's own rows count; everything else is marked outside (shown on request).
 const everyRun = async ($: EngineInterface): Promise<AgentRun[]> => {
   const side = await read($, sessions)
-  const leads = new Set((await read($, build))?.orchestrators ?? [])
+  // The build's sessions: those that reported it, the chats that started its side sessions (a build
+  // saved before `orchestrators` existed still finds its orchestrator), and those side sessions.
+  const ownSide = side.filter(s => !s.isOther)
+  const leads = new Set([
+    ...((await read($, build))?.orchestrators ?? []),
+    ...ownSide.flatMap(s => [s.parentCli ?? '', s.cli ?? '']).filter(Boolean),
+  ])
   const own = [...(await read($, agents)), ...sideRuns(side, await read($, flow), leads)]
   const seen = new Set(own.map(a => a.id))
   const counted = new Set(side.map(s => s.cli).filter(Boolean))
@@ -794,7 +802,7 @@ const PANE_CSS = `<style>
 @media (prefers-color-scheme: dark){.t{fill:#ececec}.s{fill:#a8a8a4}.m{fill:#7d7d79}.k{fill:#2c2c2b}.ln{stroke:#333331}.tile{fill:#262625}}
 .live{animation:p 1.6s ease-in-out infinite}@keyframes p{50%{opacity:.3}}
 .zz{transform-box:fill-box;opacity:0;animation:zz 3.2s ease-in-out infinite}.zz2{animation-delay:-1.6s}
-@keyframes zz{0%{transform:translate(0,3px);opacity:0}25%{opacity:.85}100%{transform:translate(5px,-7px);opacity:0}}
+@keyframes zz{0%{transform:translate(0,3px);opacity:0}25%{opacity:.85}100%{transform:translate(3px,-7px);opacity:0}}
 @media (prefers-reduced-motion: reduce){.live{animation:none}.zz{animation:none;opacity:.7}}
 </style>`
 
@@ -968,7 +976,7 @@ const crab = (x: number, y: number, costume: string, dim = false, isWalking = fa
   const group = (cls: string) => `<g class="${cls}">${(groups.get(cls) ?? []).join('')}</g>`
   const props = [...groups.keys()].filter(k => k !== 'bd' && k !== 'la' && k !== 'lb')
   const body = `<g class="bd">${(groups.get('bd') ?? []).join('')}${props.map(group).join('')}</g>`
-  return `<g transform="translate(${x},${y}) scale(${scale})" opacity="${dim ? 0.45 : 1}" shape-rendering="crispEdges"><g class="c-${costume.split('#')[0]}${isWalking ? ' run' : ''}">${body}${group('la')}${group('lb')}</g></g>`
+  return `<g transform="translate(${x},${y}) scale(${scale})" opacity="${dim ? 0.45 : isAsleep ? 0.72 : 1}" shape-rendering="crispEdges"><g class="c-${costume.split('#')[0]}${isWalking ? ' run' : ''}">${body}${group('la')}${group('lb')}</g></g>`
 }
 
 const statusMark = (x: number, y: number, status: string, color: string): string => {
@@ -1045,7 +1053,7 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const fill = progress ?? ctx / 100
   const isAsleep = a.status === 'done'
   const zs = isAsleep
-    ? `<text class="s zz" x="${ox + 27}" y="27" font-family="${FONT}" font-size="8" font-weight="700">z</text><text class="s zz zz2" x="${ox + 32}" y="22" font-family="${FONT}" font-size="10" font-weight="700">z</text>`
+    ? `<text class="s zz" x="${ox + 20}" y="25" font-family="${FONT}" font-size="8" font-weight="700">z</text><text class="s zz zz2" x="${ox + 26}" y="20" font-family="${FONT}" font-size="10" font-weight="700">z</text>`
     : ''
   return svg(
     W,
@@ -1557,7 +1565,10 @@ export const register: Register = (on, options) => {
           key="show-all"
           label={p.isShowingAll ? s.buildOnly : `${s.showAll} · ${outside.length}`}
           plain
-          onPress={() => update($, panel, prev => ({ ...prev, isShowingAll: !prev.isShowingAll }))}
+          onPress={async () => {
+            await update($, panel, prev => ({ ...prev, isShowingAll: !prev.isShowingAll }))
+            void refreshSessions($)
+          }}
         />
       ) : null
     const toggleDone = (

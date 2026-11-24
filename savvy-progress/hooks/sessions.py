@@ -1,8 +1,10 @@
 """Side sessions the desktop app started from one session: usage, active time, link.
 
-python3 sessions.py <parent cli session id> [--live] [local_… ids]  ->  JSON list on stdout.
+python3 sessions.py <parent cli session id> [--live | --all] [local_… ids]  ->  JSON list on stdout.
 --live adds every other chat on this machine that is working now or was active in the last
-LIVE_MS (Marc: the pane tracks the whole build, not the one session it sits in).
+LIVE_MS (Marc: the pane tracks the whole build, not the one session it sits in); --all ("Show
+all chats") widens that to the ALL_MAX newest chats of the last ALL_MS.
+Each row names the CLI id of the session that started it (parentCli): a build's orchestrator.
 python3 sessions.py --prior <cli session id>  ->  the CLI ids that desktop session had before, oldest first.
 Extra ids are sessions a build's jobs name: listed even when another session started them.
 The desktop app keeps one metadata file per session; each names its CLI
@@ -22,7 +24,13 @@ CACHE = os.path.join(os.environ.get('TMPDIR', '/tmp'), 'savvy-progress-sessions.
 IDLE_MS = 5 * 60 * 1000
 # ponytail: a fixed 20 min window for "recent" chats; make it a setting if it shows too much or too little.
 LIVE_MS = 20 * 60 * 1000
-BUSY_MS = 10 * 60 * 1000
+# The app writes lastActivityAt at message boundaries, not during a silent tool call (checked
+# 2026-11-23: it stood still through a 75s command). So an open turn counts as running for up to
+# BUSY_MS after its last activity; the stale flags this guards against were days old.
+# ponytail: a session that crashed mid-turn reads as running for up to 2h; tighten if that bites.
+BUSY_MS = 2 * 3600 * 1000
+ALL_MS = 7 * 24 * 3600 * 1000
+ALL_MAX = 40
 
 
 def ms(ts):
@@ -58,7 +66,7 @@ def scan(path):
             'first': stamps[0] if stamps else 0, 'last': stamps[-1] if stamps else 0}
 
 
-def main(parent_cli, extra=(), live=False):
+def main(parent_cli, extra=(), live=False, every=False):
     try:
         cache = json.load(open(CACHE))
     except (OSError, ValueError):
@@ -69,8 +77,12 @@ def main(parent_cli, extra=(), live=False):
     rows = []
     extra = set(extra)
     now = time.time() * 1000
-    for text in metas.values() if parent or extra or live else []:
-        if not (live or (parent and parent in text) or any(x in text for x in extra)):
+    window = ALL_MS if every else LIVE_MS
+    live = live or every
+    for path, text in metas.items() if parent or extra or live else []:
+        # A chat untouched for longer than the window is skipped unread (its file's time says so).
+        fresh = live and now - os.path.getmtime(path) * 1000 < window
+        if not (fresh or (parent and parent in text) or any(x in text for x in extra)):
             continue
         d = json.loads(text)
         spawned = d.get('spawnedFrom') or {}
@@ -79,7 +91,7 @@ def main(parent_cli, extra=(), live=False):
         # Marc: the app leaves "a turn is open" set on chats dormant for days, so it counts only
         # with recent activity behind it; that stale flag kept old rows "running" in the pane.
         busy = (d.get('latestUserFrameAt') or 0) > (d.get('lastTurnEdgeAt') or 0) and now - active_at < BUSY_MS
-        if not is_child and not (live and d.get('sessionId') != parent and not d.get('isArchived') and now - active_at < LIVE_MS):
+        if not is_child and not (live and d.get('sessionId') != parent and not d.get('isArchived') and now - active_at < window):
             continue
         cli = d.get('cliSessionId') or ''
         main_files = glob.glob(os.path.join(PROJECTS, '*', cli + '.jsonl'))
@@ -102,6 +114,8 @@ def main(parent_cli, extra=(), live=False):
             'id': d.get('sessionId'),
             'cli': cli,
             'isOther': not is_child,
+            'parentLocal': spawned.get('sessionId') or '',
+            'activeAt': active_at,
             'name': spawned.get('name') or '',
             'title': d.get('title') or '',
             'link': 'claude://claude.ai/epitaxy/' + (d.get('sessionId') or ''),
@@ -116,6 +130,15 @@ def main(parent_cli, extra=(), live=False):
             'requests': sum(s['requests'] for s in scans),
             'models': models,
         })
+    # The CLI id of each row's parent session: the chat that started it.
+    for r in rows:
+        pid = r.pop('parentLocal')
+        text = next((t for t in metas.values() if pid and '"' + pid + '"' in t and json.loads(t).get('sessionId') == pid), None) if pid else None
+        r['parentCli'] = json.loads(text).get('cliSessionId') or '' if text else ''
+    others = sorted((r for r in rows if r['isOther']), key=lambda r: -r['activeAt'])
+    if every:
+        drop = {id(r) for r in others[ALL_MAX:]}
+        rows = [r for r in rows if id(r) not in drop]
     try:
         json.dump(cache, open(CACHE, 'w'))
     except OSError:
@@ -139,5 +162,5 @@ if __name__ == '__main__':
     if len(sys.argv) > 2 and sys.argv[1] == '--prior':
         prior(sys.argv[2])
     else:
-        rest = [a for a in sys.argv[2:] if a != '--live']
-        main(sys.argv[1] if len(sys.argv) > 1 else '', rest, '--live' in sys.argv[2:])
+        rest = [a for a in sys.argv[2:] if a not in ('--live', '--all')]
+        main(sys.argv[1] if len(sys.argv) > 1 else '', rest, '--live' in sys.argv[2:], '--all' in sys.argv[2:])
