@@ -82,14 +82,6 @@ export type SideSession = {
   parentCli?: string
 }
 
-export type Panel = {
-  isCompact: boolean
-  isDoneCollapsed: boolean
-  autoOpenedFor: string
-  /** Marc: other chats on the machine listed too, under their own heading; the totals stay the build's. */
-  isShowingAll?: boolean
-}
-
 export type JobStatus = 'running' | 'waiting' | 'planned' | 'later' | 'shipped'
 
 /** One job of a build: one PR, run by one or more agents or side sessions. */
@@ -134,8 +126,6 @@ declare module 'claude-code' {
       flow: Flow | null
       agents: AgentRun[]
       sessions: SideSession[]
-      panel: Panel
-      now: number
       build: Build | null
       /** Marc: other sessions' agent rows, re-read from disk on the timer. */
       fleet: AgentRun[]

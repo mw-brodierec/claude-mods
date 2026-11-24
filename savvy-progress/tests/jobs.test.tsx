@@ -3,13 +3,6 @@ import { expect, test } from 'claude-code/testing'
 import { mergeBuild, nowNext, summaryLine, wrap } from '../hooks/jobs'
 
 // Invented sample data only: this repository is public.
-const PANE = {
-  plugin: 'savvy-progress',
-  component: 'Pane',
-  requestId: 'savvy-agents',
-  props: { title: 'Agents', isFocused: false, bodyColumns: 120, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} },
-} as const
-
 const BAND = { plugin: 'savvy-progress', component: 'AbovePrompt', props: { bodyColumns: 120, isWorking: true, hasSurvey: false } } as const
 
 const SESSION = {
@@ -88,12 +81,14 @@ function harness(on: Parameters<Parameters<typeof test>[1]>[1]) {
   const procs: string[] = []
   // What sessions.py lists: side sessions, and with --live other chats on the machine.
   const side: Record<string, unknown>[] = [SESSION]
+  const runs: string[][] = []
   on('process.run', (_, e) => {
+    runs.push([...((e as { argv?: readonly string[] }).argv ?? [])])
     const text = JSON.stringify(e)
     if (text.includes('"ps"')) return { value: { exitCode: 0, stdout: procs.join('\n'), stderr: '' } }
     return { value: { exitCode: 0, stdout: JSON.stringify(text.includes('--prior') ? priors : side), stderr: '' } }
   })
-  return Object.assign(files, { store, opened, closed, priors, procs, time, side })
+  return Object.assign(files, { store, opened, closed, priors, procs, time, side, runs })
 }
 
 test('merge upserts by id, stamps updated only on change, and derives the summary', () => {
@@ -112,7 +107,7 @@ test('merge upserts by id, stamps updated only on change, and derives the summar
   expect(wrap('one two three four five six', 11, 40, 2).length).toBe(2)
 })
 
-test('the jobs tool writes the build file and answers the list; the pane shows no jobs', async ($, on) => {
+test('the jobs tool writes the build file and answers the list, and opens no pane', async ($, on) => {
   const files = harness(on)
   const ran = await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
   const text = JSON.stringify(ran)
@@ -127,17 +122,8 @@ test('the jobs tool writes the build file and answers the list; the pane shows n
   const saved = JSON.parse(files.get(path) ?? '{}') as { jobs: { id: string; status: string }[] }
   expect(saved.jobs.map(j => `${j.id}:${j.status}`)).toEqual(['seeds:shipped', 'water:running', 'frost:waiting', 'harvest:running', 'mobile:later'])
 
-  // Marc (Nov 23): the pane shows agents only; build jobs live in the tracker artifact.
-  for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...PANE, surface })
-    expect(await ui.find({ type: 'Link' })).toBeUndefined()
-    expect(await ui.find({ type: 'Button', key: 'shipped' })).toBeUndefined()
-    expect(await ui.find({ type: 'Box', key: 'jobs-col' })).toBeUndefined()
-    expect(await ui.find({ type: 'Text', text: /Waiting on: a weather API key/ })).toBeUndefined()
-    // The side session's own row still opens its chat.
-    expect(await ui.find({ type: 'Button', key: 'open-local_w1' })).toBeTruthy()
-    await ui.unmount()
-  }
+  // Marc (Nov 23): the savvy board replaced the Agents pane; nothing opens a pane any more.
+  expect(files.opened).toEqual([])
 })
 
 test('the band shows the build and counts live sessions, not in-flight Agent calls', async ($, on) => {
@@ -152,21 +138,9 @@ test('the band shows the build and counts live sessions, not in-flight Agent cal
   }
 })
 
-test('the desktop pane is one agents column with no Swap, and the band is one glass row', async ($, on) => {
+test('the band is one glass row that narrows by width', async ($, on) => {
   harness(on)
   await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
-
-  // The pane has one column of agents and no Swap, wide or narrow.
-  for (const bodyColumns of [140, 60]) {
-    const pane = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, bodyColumns } })
-    expect(await pane.find({ type: 'Button', key: 'layout-swap' })).toBeUndefined()
-    expect(await pane.find({ type: 'Box', key: 'jobs-col' })).toBeUndefined()
-    expect(await pane.find({ type: 'Box', key: 'agents-col' })).toBeTruthy()
-    const svgs = (await pane.findAll({ type: 'Svg' })) as { props: { width?: number; isInteractive?: boolean; alt: string } }[]
-    expect(svgs.filter(x => x.props.alt).every(x => x.props.width === undefined)).toBe(true)
-    expect(svgs.some(x => x.props.isInteractive)).toBe(false)
-    await pane.unmount()
-  }
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const glass = await ui.find({ type: 'Box', key: 'savvy-glass' })
@@ -183,27 +157,6 @@ test('the desktop pane is one agents column with no Swap, and the band is one gl
   expect(await slim.find({ type: 'Button', key: 'savvy-agents' })).toBeTruthy()
   expect(await slim.find({ type: 'Text', text: 'Garden planner' })).toBeTruthy()
   await slim.unmount()
-})
-
-test('a pane left open comes back after a restart, and one closed by hand does not', async ($, on) => {
-  const { store, opened } = harness(on)
-  on('session.start', (_, e) => e as never)
-  const at = Date.UTC(2026, 10, 22, 18)
-
-  await $.command.run({ command: 'agents-info', args: '' })
-  expect(store.get('open-panes')).toEqual({ 'cli-test': at })
-
-  // A restart: the engine starts the session again with the pane gone.
-  opened.length = 0
-  await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never)
-  expect(opened).toEqual(['savvy-agents'])
-
-  // Closed again: forgotten, so the next start leaves it shut.
-  await $.command.run({ command: 'agents-info', args: '' })
-  expect(store.get('open-panes')).toEqual({})
-  opened.length = 0
-  await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never)
-  expect(opened).toEqual([])
 })
 
 // Marc: after a restart the band must show the build another session keeps, wherever it was started.
@@ -234,18 +187,14 @@ test('a start hook that fails before the restore still leaves the band showing t
   await ui.unmount()
 })
 
-test('agent rows come back after a restart, a row still running then shown as finished', async ($, on) => {
+test('agent rows saved before a restart stay saved for the board', async ($, on) => {
   const files = harness(on)
   on('session.start', (_, e) => e as never)
   const at = Date.UTC(2026, 10, 22, 18)
   const run = (id: string, status: 'running' | 'done', description: string) => ({ id, agentId: id, type: 'lab-worker', description, model: 'claude-opus-5-5', status, startedAt: at - 600_000, contextTokens: 1000, contextMax: 1_000_000, tokens: 5000, costUsd: 0.4, steps: 3, round: 1, ...(status === 'done' ? { endedAt: at - 60_000 } : {}) })
   files.set('/home/test/.claude/savvy-progress/agents/cli-test.json', JSON.stringify({ savedAt: at - 30_000, runs: [run('a1', 'done', 'Merge main into job 9'), run('a2', 'running', 'Job 9b hiring plan')] }))
   await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never).catch(() => undefined)
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await new Promise(r => setTimeout(r, 30))
-  expect(await ui.find({ type: 'Text', text: /Merge main into job 9/ })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: /Job 9b hiring plan/ })).toBeTruthy()
-  await ui.unmount()
   const saved = JSON.parse(files.get('/home/test/.claude/savvy-progress/agents/cli-test.json') ?? '{}') as { runs: { id: string; status: string }[] }
   expect(saved.runs.find(r => r.id === 'a2')?.status).toBe('running')
 })
@@ -258,10 +207,14 @@ test('after a desktop restart gives the chat a new session id, the rows saved un
   files.set('/home/test/.claude/savvy-progress/agents/cli-test.json', JSON.stringify({ savedAt: at, runs: [] }))
   files.set('/home/test/.claude/savvy-progress/agents/old-id.json', JSON.stringify({ savedAt: at - 30_000, runs: [{ id: 'w1', agentId: 'w1', type: 'lab-worker', description: 'Gate the market page', model: 'claude-opus-5-5', status: 'running', startedAt: at - 600_000, contextTokens: 0, contextMax: 1_000_000, tokens: 0, costUsd: 0.2, steps: 1, round: 1 }] }))
   await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never).catch(() => undefined)
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await new Promise(r => setTimeout(r, 30))
-  expect(await ui.find({ type: 'Text', text: /Gate the market page/ })).toBeTruthy()
-  await ui.unmount()
+  // The board reads old-id.json itself; this session counts the row on the band (with the side session).
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
+  // The tool refreshes the sessions in the background; a lookup call lets that land first.
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', build: 'Garden planner' })
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(((await band.find({ type: 'Button', key: 'savvy-agents' })) as { props: { label: string } }).props.label).toBe('🔍 ×2')
+  await band.unmount()
 })
 
 test('a background shell task gets a row while it runs, and finishes once its process is gone', async ($, on) => {
@@ -269,20 +222,23 @@ test('a background shell task gets a row while it runs, and finishes once its pr
   on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'bg1' } }))
   const command = '~/gate.sh ~/repo --push 2>&1 | tail -45'
   h.procs.push(`/bin/zsh -c eval '${command}'`)
+  // The band counts the running row: a build with no side sessions, so only the shell is live.
+  h.side.length = 0
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
   await $.tool.call({ tool: 'Bash', command, description: 'Run the test gate on PR 226', run_in_background: true })
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: /Run the test gate on PR 226/ })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: '●' })).toBeTruthy()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ type: 'Text', text: /Jobs 1\/5 · 1 running/ }), 'running at first').toBeTruthy()
   // Still running at the next tool call; then the process ends and the next check finishes the row.
   h.time.at += 10_000
   await $.tool.call({ tool: 'Bash', command: 'true', description: 'x' })
-  expect(await ui.find({ type: 'Text', text: '●' })).toBeTruthy()
+  await new Promise(r => setTimeout(r, 30))
+  expect(await band.find({ type: 'Text', text: /Jobs 1\/5 · 1 running/ }), 'still running').toBeTruthy()
   h.procs.length = 0
   h.time.at += 10_000
   await $.tool.call({ tool: 'Bash', command: 'true', description: 'x' })
   await new Promise(r => setTimeout(r, 30))
-  expect(await ui.find({ type: 'Text', text: '✓' })).toBeTruthy()
-  await ui.unmount()
+  expect(await band.find({ type: 'Text', text: /^Jobs 1\/5 · \d+%$/ }), 'nothing running').toBeTruthy()
+  await band.unmount()
 })
 
 test('with session.start skipped (a resume), the first tool call brings the build back', async ($, on) => {
@@ -296,81 +252,14 @@ test('with session.start skipped (a resume), the first tool call brings the buil
   await ui.unmount()
 })
 
-// Marc: a new chat never opens the pane just because some build is unfinished.
-test('a fresh session with an unfinished build keeps the pane shut', async ($, on) => {
+// Marc: nothing opens a pane any more, not even a session with an unfinished build.
+test('a fresh session with an unfinished build opens no pane', async ($, on) => {
   const files = harness(on)
   on('session.start', (_, e) => e as never)
   on('tool.register', (_, e) => ({ value: { tool: `mcp__savvy-progress__${(e as { name: string }).name}` } }))
-  on('command.register', () => ({ value: { command: 'agents-info' } }))
   files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/garden')))
   await $.session.start({ source: 'startup', cwd: '/projects/garden' } as never)
   expect(files.opened).toEqual([])
-})
-
-// Marc: the totals are the build's; other chats and other sessions' agents show only on request.
-test('other chats stay out of the build totals and show only with Show all chats', async ($, on) => {
-  const files = harness(on)
-  // A busy unrelated chat ($20 of output) and an unrelated agent saved by another session ($50).
-  files.side.push({ ...SESSION, id: 'local_x', name: '', title: 'JARVIS sweep', cli: 'cli-x', isOther: true, running: true, models: { 'claude-opus-5-5': [0, 1_000_000, 0, 0, 0] } })
-  const run = { id: 'ag-y', agentId: 'ag-y', type: 'Explore', description: 'Unrelated digging', model: 'claude-opus-5-5', status: 'running', startedAt: files.time.at - 1_000, contextTokens: 0, contextMax: 1e6, tokens: 0, costUsd: 50, steps: 1, round: 1 }
-  files.set('/home/test/.claude/savvy-progress/agents/cli-y.json', JSON.stringify({ savedAt: files.time.at, runs: [run] }))
-  // The build opens the pane and refreshes the chats and other sessions' rows in the background.
-  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
-  await new Promise(r => setTimeout(r, 30))
-
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: /JARVIS sweep/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /Unrelated digging/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /≈\$0\.02 ·/ })).toBeTruthy()
-
-  await ui.press({ key: 'show-all' })
-  expect(await ui.find({ type: 'Text', text: /JARVIS sweep/ })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: /Unrelated digging/ })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: /≈\$0\.02 ·/ }), 'the totals stay the build\'s').toBeTruthy()
-  await ui.unmount()
-})
-
-// Marc: a finished worker sleeps (eyes shut, z's rising); a running one doesn't.
-test('a finished session sleeps on its card and a running one does not', async ($, on) => {
-  const files = harness(on)
-  files.side[0] = { ...SESSION, running: false }
-  files.side.push({ ...SESSION, id: 'local_r', name: 'other-job', title: 'Frost alerts', running: true })
-  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
-  await new Promise(r => setTimeout(r, 30))
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, bodyColumns: 60 } })
-  const svgs = (await ui.findAll({ type: 'Svg' })) as { props: { alt: string; source: string } }[]
-  const card = (name: string) => svgs.find(x => x.props.alt.startsWith(name))?.props.source ?? ''
-  expect(card('Watering schedule')).toContain('class="s zz"')
-  expect(card('Frost alerts')).not.toContain('class="s zz"')
-  await ui.unmount()
-})
-
-// Marc: a card glows only under the pointer: a hidden layer the app's hover reveals, and every
-// drawing stays a plain image (an interactive frame left uneven gaps).
-test('cards glow only on hover, through a hidden layer over a plain image', async ($, on) => {
-  harness(on)
-  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
-  await new Promise(r => setTimeout(r, 30))
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, bodyColumns: 60 } })
-  // findAll leaves hover styles out; the drawn tree keeps them.
-  type Node = { type?: string; key?: string; props?: Record<string, unknown>; hover?: { display?: string }; children?: unknown[] }
-  const all: Node[] = []
-  const walk = (n: unknown): void => {
-    if (!n || typeof n !== 'object') return
-    all.push(n as Node)
-    for (const c of (n as Node).children ?? []) walk(c)
-  }
-  walk(await ui.drawn())
-  // In the drawn tree a Box's key, the hover scope, sits in its props.
-  const card = all.find(x => x.props?.key === 'local_w1')
-  expect(card?.props?.position).toBe('relative')
-  const layers = all.filter(x => x.props?.display === 'none' && x.hover?.display === 'flex' && x.props?.position === 'absolute')
-  expect(layers.length).toBeGreaterThan(0)
-  expect(layers.every(x => x.props?.key === undefined), 'a keyed layer would be its own hover scope and never light').toBe(true)
-  const svgs = (await ui.findAll({ type: 'Svg' })) as { props: { source: string; isInteractive?: boolean } }[]
-  expect(svgs.some(x => x.props.isInteractive)).toBe(false)
-  expect(svgs.some(x => /class="glive"|class="gfaint"/.test(x.props.source))).toBe(false)
-  await ui.unmount()
 })
 
 // Marc: the header says what is happening now and what is next, from the jobs, not a written summary.
@@ -384,27 +273,17 @@ test('Now and Next come from the jobs: running first, else waiting; then the nex
   expect(nowNext(mergeBuild(b, { next: ['mobile', 'seeds', 'harvest'] }, 3_000, '/p')).next).toBe('Job 5 Mobile layout · Job 4 Harvest log')
 })
 
-// Marc: the pane has a Refresh button that re-reads everything.
-test('Refresh re-reads the pane', async ($, on) => {
-  harness(on)
-  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
-  await new Promise(r => setTimeout(r, 30))
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, bodyColumns: 60 } })
-  expect(await ui.find({ type: 'Button', key: 'refresh' })).toBeTruthy()
-  await ui.press({ key: 'refresh' })
-  expect(await ui.find({ type: 'Button', key: 'refresh' })).toBeTruthy()
-  await ui.unmount()
-})
-
-// Marc: after /reload-plugins the pane stayed the old copy's (dead buttons) or "has not drawn". The
-// band's ↻ (always drawn) closes the pane and opens it again, so this copy draws it fresh.
-test('the band refresh reopens the pane fresh and re-reads everything', async ($, on) => {
+// Marc (Nov 23): the band's 🔍 opens the savvy board window and ↻ has it re-read; no pane.
+test('the band buttons open the savvy board, never a pane', async ($, on) => {
   const files = harness(on)
+  files.set('/home/test/.claude/savvy-progress/board.json', JSON.stringify({ url: 'http://127.0.0.1:7447', start: '/home/test/marc-mods/savvy-board/start-board.sh' }))
   await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
-  expect(files.opened).toContain('savvy-agents')
   const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await band.press({ key: 'savvy-agents' })
+  await new Promise(r => setTimeout(r, 30))
+  expect(files.runs.some(a => a.at(-1) === '/home/test/marc-mods/savvy-board/start-board.sh')).toBe(true)
   await band.press({ key: 'savvy-refresh' })
-  expect(files.closed).toContain('savvy-agents')
-  expect(files.opened).toContain('savvy-agents')
+  expect(files.runs.some(a => a.at(-1) === '--refresh')).toBe(true)
+  expect(files.opened).toEqual([])
   await band.unmount()
 })

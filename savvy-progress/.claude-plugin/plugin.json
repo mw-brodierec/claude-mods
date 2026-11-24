@@ -1,7 +1,7 @@
 {
   "name": "savvy-progress",
-  "version": "1.2.0-marc.27",
-  "description": "Progress bar above the prompt for /savvy-flow, plus an agents panel (/agents-info): running, finished and planned subagents with model, task progress, context, cost and time. Marc: side sessions (start_session) count too, each row opens its chat. Build jobs (jobs tool) feed the band and the savvy board; the pane shows agents only.",
+  "version": "1.3.0-marc.28",
+  "description": "Progress bar above the prompt for /savvy-flow. Marc: no pane; the band's 🔍 opens the savvy board window, which shows agents, side sessions and build jobs from the files this mod writes.",
   "author": {
     "name": "johnnyvizz",
     "url": "https://github.com/johnnyvizz"

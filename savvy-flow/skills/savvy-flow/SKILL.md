@@ -24,11 +24,11 @@ If the tool `mcp__savvy-progress__progress` is available, keep it current; skip 
 - if re-planning changes the tasks: the new `tasks` and `total`;
 - once at close: `finished: true`.
 
-When delegating, pass the task's `title` verbatim as the Agent tool's `description` (a return round reuses it too): the agents panel matches runs to planned tasks by it.
+When delegating, pass the task's `title` verbatim as the Agent tool's `description` (a return round reuses it too): the savvy board matches runs to planned tasks by it.
 
 ## Build jobs (multi-job builds)
 
-A **build** is work that ships as several PRs: each PR is a **job**, run by one or more workers or side sessions. Whenever the plan has two or more jobs, keep the build's job list current with `mcp__savvy-progress__jobs` (skip silently if the tool is not there). The list lives in a file per build, so it outlives this session; the band above the prompt shows jobs shipped out of all and the savvy board window shows the list (the Agents pane shows agents only).
+A **build** is work that ships as several PRs: each PR is a **job**, run by one or more workers or side sessions. Whenever the plan has two or more jobs, keep the build's job list current with `mcp__savvy-progress__jobs` (skip silently if the tool is not there). The list lives in a file per build, so it outlives this session; the band above the prompt shows jobs shipped out of all and the savvy board window shows the list.
 
 - **Resume first.** At the start of a session that continues a build, call it with only `build` (the build's name) and read the list it returns before planning anything.
 - **On planning**: seed every job (`id`, `title`, one-line `detail`, `status` `planned`, or `later` for jobs parked outside this build's scope), plus `memo` (the build memo's path or link), a one- or two-sentence `summary` of where the build stands, and `next`: the job ids in the order they will run (the panel's "Next" line follows it).
