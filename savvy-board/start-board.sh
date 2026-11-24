@@ -11,7 +11,7 @@ refresh=0
 dir=${0:A:h}
 port=${SAVVY_BOARD_PORT:-7447}
 url="http://127.0.0.1:$port"
-node=${NODE:-$HOME/.local/bin/node}
+node=${NODE:-$(for n in $HOME/.local/bin/node /opt/homebrew/bin/node /usr/local/bin/node $(command -v node); do [[ -x $n ]] && { echo $n; break }; done)}
 
 if ! curl -s -o /dev/null -m 1 "$url/"; then
   mkdir -p "$HOME/Library/Logs"

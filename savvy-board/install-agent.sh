@@ -7,7 +7,7 @@ set -e
 dir=${0:A:h}
 label=com.marc-mods.savvy-board
 plist="$HOME/Library/LaunchAgents/$label.plist"
-node=${NODE:-$HOME/.local/bin/node}
+node=${NODE:-$(for n in $HOME/.local/bin/node /opt/homebrew/bin/node /usr/local/bin/node $(command -v node); do [[ -x $n ]] && { echo $n; break }; done)}
 
 if [[ $1 == --remove ]]; then
   launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true

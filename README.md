@@ -22,4 +22,15 @@ If you already installed the originals (`skins@hellosverre-mods`, `savvy-progres
 | **blast-radius** | A safety net: before Claude runs `rm -rf`, `git reset --hard`, `git clean`, a force push or a migration, it shows what would be deleted or lost and waits for Proceed or Cancel. Unchanged from [anthropics/claude-code-playground](https://github.com/anthropics/claude-code-playground) (Apache-2.0). |
 | **Heads up** (built in) | Claude Code's own you-should-know plugin. |
 
+## Savvy Flow board (optional)
+
+The build and agents board as its own small Mac app, **Savvy Flow** (Clawd in the Dock, no extra Chrome). After installing savvy-progress and savvy-flow, run once in a terminal:
+
+```
+~/.claude/plugins/marketplaces/marc-mods/savvy-board/install-agent.sh
+~/.claude/plugins/marketplaces/marc-mods/savvy-board/start-board.sh
+```
+
+The first keeps the board's server running across logins; the second builds `~/Applications/Savvy Flow.app` and opens it (about 30 s the first time). After that, the 🔍 on the progress band opens it. Needs Node 22.18+, Google Chrome (to draw the icon once) and Xcode's Command Line Tools (`xcode-select --install`). Details: `savvy-board/README.md`.
+
 Mods use an early-access Claude Code API, so a Claude Code update can break one. If a mod stops showing, run `/reload-plugins` or reinstall it.
