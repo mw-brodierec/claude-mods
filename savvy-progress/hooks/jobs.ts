@@ -41,6 +41,7 @@ text{paint-order:stroke;stroke:#ffffff;stroke-opacity:.8;stroke-width:2.4px;stro
 text{stroke:#141413}}
 .live{animation:p 1.6s ease-in-out infinite}@keyframes p{50%{opacity:.3}}
 @media (prefers-reduced-motion: reduce){.live{animation:none}}
+.lk{fill:#2563c9}@media (prefers-color-scheme: dark){.lk{fill:#6aa8f5}}
 </style>`
 
 // Group order and names on the page; `later` sits after planned, shipped last.
@@ -224,6 +225,17 @@ export const summaryLine = (b: Build): string => {
 
 export const labelOf = (b: Build, j: Job): string => j.label || `Job ${b.jobs.indexOf(j) + 1}`
 
+// Marc: a job's PR numbers as a drawing, so they read at the card's own text size (the pane's
+// link text has one fixed size, larger than the card's). The pane puts a ↗ link beside it.
+// `scale` makes up for the card body being drawn wider than its column and shrunk to fit.
+export const prLineSvg = (text: string, maxW: number, scale: number): Drawn => {
+  const size = JOB_THEME.size.body * scale
+  const shown = fitText(text, size, maxW)
+  const W = Math.ceil(textWidth(shown, size) + 2)
+  const H = Math.ceil(size * 1.45)
+  return { source: svg(W, H, txt(0, Math.round(size * 1.1), size, shown, 'class="lk" font-weight="500"')), height: H }
+}
+
 // Marc: what is happening now and what comes next, read from the jobs themselves (a written
 // summary went stale: "13 of 19" under a header counting 16 of 21). Now: the running jobs, else
 // those waiting and on what. Next: the first two planned, else the first two for later.
@@ -354,7 +366,8 @@ export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[]
   const xr = opts.isBare ? W - 1 : W - I - T.pad
   const inner = xr - x0
   const parts: string[] = []
-  let y = opts.isBare ? 20 : I + T.pad + 11
+  // Marc: the same room above the first line as below the last (the pane adds 10px under the card).
+  let y = opts.isBare ? 23 : I + T.pad + 11
   const date = `${words.updated} ${fmtDay(j.updated)}`
   const dateW = textWidth(date, T.size.label) + 8
   parts.push(
@@ -400,7 +413,7 @@ export const jobCardSvg = (W: number, b: Build, j: Job, runs: readonly RunLine[]
       parts.push(txt(x0 + 13, y, T.size.agent, `+${runs.length - T.maxAgents} ${words.more}`, 'class="m"'))
     }
   }
-  const H = Math.ceil(y + (opts.isBare ? 8 : T.pad + I))
+  const H = Math.ceil(y + (opts.isBare ? 5 : T.pad + I))
   const isQuiet = j.status === 'planned' || j.status === 'later' || j.status === 'shipped'
   return {
     source: svg(W, H, (opts.isBare ? '' : glassPanel(I, I, W - I * 2, H - I * 2, { tint: color, isQuiet })) + parts.join('')),

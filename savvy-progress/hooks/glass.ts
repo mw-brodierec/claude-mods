@@ -98,14 +98,15 @@ export const glassBar = (x: number, y: number, w: number, h: number, segments: {
   }
   const litW = segments.filter(seg => seg.w > 0 && !seg.isFaint).reduce((n, seg) => n + seg.w, 0)
   const clip = `${id}bar${Math.round(y)}_${Math.round(x)}`
-  const coreH = Math.max(1.2, h * 0.34)
+  // Marc: a fine core, half the first one.
+  const coreH = Math.max(1, h * 0.17)
   const core = litW > 0 ? `<rect x="${x + r * 0.4}" y="${y + (h - coreH) / 2}" width="${Math.max(0, litW - r * 0.8)}" height="${coreH}" rx="${coreH / 2}" fill="#ffffff" opacity=".9"/>` : ''
   return [
     `<clipPath id="${clip}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}"/></clipPath>`,
     // The empty track, visible on dark and light alike, so a half-done bar reads as half done.
     `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="#8a8a86" opacity=".28"/>`,
     `<g clip-path="url(#${clip})">${faint.join('')}</g>`,
-    glow.length ? `<g class="hum" filter="url(#${id}sg)" opacity=".38">${glow.join('')}</g>` : '',
+    glow.length ? `<g class="hum" filter="url(#${id}sg)" opacity=".2">${glow.join('')}</g>` : '',
     `<g clip-path="url(#${clip})">${lit.join('')}${core}</g>`,
   ].join('')
 }

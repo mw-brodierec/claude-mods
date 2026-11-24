@@ -123,7 +123,10 @@ test('the jobs tool writes the build file, answers the list, and the pane shows 
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.findAll({ type: 'Link' })).map(l => l.text)).toContain('PR 12 ↗')
+    // Desktop draws the PR numbers at the card's size with a ↗ link beside them; the terminal keeps one link.
+    const links = (await ui.findAll({ type: 'Link' })) as { text?: string; props: { href?: string } }[]
+    expect(links.some(l => l.props.href === 'https://example.com/pr/12' && (l.text === 'PR 12 ↗' || l.text === '↗'))).toBe(true)
+    if (surface === 'desktop') expect(await ui.find({ type: 'Svg', alt: 'PR 12' } as never)).toBeTruthy()
     expect(await ui.find({ type: 'Button', key: 'shipped' })).toBeTruthy()
     // The side session's own row still opens its chat.
     expect(await ui.find({ type: 'Button', key: 'open-local_w1' })).toBeTruthy()

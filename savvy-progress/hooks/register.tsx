@@ -15,6 +15,7 @@ import {
   labelOf,
   mergeBuild,
   nowNext,
+  prLineSvg,
   runsOf,
   slug,
   summaryLine,
@@ -105,9 +106,9 @@ const STRINGS = {
     noJobs: 'No jobs yet.',
     nowWord: 'Now',
     nextWord: 'Next',
-    refresh: '↻ Refresh',
+    refresh: 'Refresh',
     otherChat: 'other chat',
-    showAll: 'Show all chats',
+    showAll: 'All chats',
     buildOnly: 'Build only',
     otherChats: 'Other chats',
   },
@@ -154,7 +155,7 @@ const STRINGS = {
     noJobs: 'Задач пока нет.',
     nowWord: 'Сейчас',
     nextWord: 'Дальше',
-    refresh: '↻ Обновить',
+    refresh: 'Обновить',
     otherChat: 'другой чат',
     showAll: 'Все чаты',
     buildOnly: 'Только сборка',
@@ -333,6 +334,9 @@ const MIN_COL = 320
 // Marc (2026-11-23, seen in a capture of the app): at 9.6 a wide pane drew narrower than its
 // column, leaving more room on the right than the left. Made wider, a drawing is always shrunk to fit.
 const PANE_CELL_PX = 10.4
+// What one of bodyColumns' cells really measures in the pane, so a drawing shown at its own size
+// (not shrunk to the column) can match the shrunk ones.
+const PANE_CELL_REAL = 9.3
 // Marc: every pane drawing is a plain image. A hoverable (isInteractive) frame keeps its drawn
 // height while the app shrinks the picture to the column, which left uneven gaps above and below.
 
@@ -348,6 +352,10 @@ const BAND_CELL_PX = 7.4
 const COL_GAP_PX = 16
 // Marc: the glimmer on a hovered job card: a soft band of light sweeping left to right every 2.6s,
 // drawn wide and tall and clipped by the card's box, so it needs no measure of the card.
+// Marc (seen in a capture of the app): an absolute Box sizes itself to its parent, and the app caps
+// a drawing at its box's width, so a wide drawing (the band's beam, a sheen) was squeezed to a
+// sliver and never showed. Such a box gets a width of its own, in cells, wider than any drawing.
+const WIDE_CELLS = 320
 const SPACER = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="10" viewBox="0 0 1 10"></svg>'
 const GLIMMER_W = 1400
 const GLIMMER_H = 400
@@ -1612,19 +1620,19 @@ export const register: Register = (on, options) => {
     // The pane's title says "Agents"; inside, only the flow's own name.
     const title = f && !f.isFinished ? f.title : ''
 
+    // Marc: the controls stay on one line: icon and word while all four fit, the icons alone when the
+    // pane is too narrow. App text has one size here (the pane refuses Text `size`), so width decides.
+    const controlWords = [s.collapse, s.showAll, s.refresh, b ? 'Swap' : ''].join('').length
+    const isIconOnly = (e.props.bodyColumns || 40) < controlWords + 4 * 4 + 8
+    const iconLabel = (icon: string, word: string) => (isIconOnly ? icon : `${icon} ${word}`)
     const toggleCompact = (
-      <Button
-        key="compact"
-        label={p.isCompact ? s.expand : s.collapse}
-        plain
-        onPress={() => update($, panel, prev => ({ ...prev, isCompact: !prev.isCompact }))}
-      />
+      <Button key="compact" label={iconLabel(p.isCompact ? '⊞' : '⊟', p.isCompact ? s.expand : s.collapse)} plain onPress={() => update($, panel, prev => ({ ...prev, isCompact: !prev.isCompact }))} />
     )
     const toggleAll =
       outside.length || p.isShowingAll ? (
         <Button
           key="show-all"
-          label={p.isShowingAll ? s.buildOnly : `${s.showAll} · ${outside.length}`}
+          label={p.isShowingAll ? iconLabel('◉', s.buildOnly) : `${iconLabel('◎', s.showAll)} · ${outside.length}`}
           plain
           onPress={async () => {
             await update($, panel, prev => ({ ...prev, isShowingAll: !prev.isShowingAll }))
@@ -1632,7 +1640,7 @@ export const register: Register = (on, options) => {
           }}
         />
       ) : null
-    const refreshButton = <Button key="refresh" label={s.refresh} plain onPress={() => refreshNow($)} />
+    const refreshButton = <Button key="refresh" label={iconLabel('↻', s.refresh)} plain onPress={() => refreshNow($)} />
     const toggleDone = (
       <Button
         key="done"
@@ -1704,10 +1712,10 @@ export const register: Register = (on, options) => {
           </Box>
         )
       }
-      // Marc: the pane's controls on one row at the top, wrapping to a second when the pane is narrow.
+      // Marc: the pane's controls on one row at the top, small, each with its icon; never two lines.
       const controls = (
-        <Box key="pane-controls" flexDirection="row" flexWrap="wrap" columnGap={2}>
-          {b ? <Button key="layout-swap" label={isWide ? '⇄ Swap' : '⇅ Swap'} plain onPress={() => update($, panel, prev => ({ ...prev, isAgentsFirst: !prev.isAgentsFirst }))} /> : null}
+        <Box key="pane-controls" flexDirection="row" flexWrap="nowrap" overflow="hidden" columnGap={2}>
+          {b ? <Button key="layout-swap" label={iconLabel(isWide ? '⇄' : '⇅', 'Swap')} plain onPress={() => update($, panel, prev => ({ ...prev, isAgentsFirst: !prev.isAgentsFirst }))} /> : null}
           {toggleCompact}
           {toggleAll}
           {refreshButton}
@@ -1753,14 +1761,21 @@ export const register: Register = (on, options) => {
         const drawn = jobCardSvg(CW, b, j, runLines(runsOf(j, list), at), { updated: s.updated, waitingOn: s.waitingOn, more: s.more }, { isBare: true, hasLink: Boolean(j.prUrl) })
         return [
           <Box key={`job-${j.id}`} position="relative" overflow="hidden" flexDirection="column" borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL} paddingX={1} paddingY={0} hover={{ borderColor: `${tint}8c` }}>
-            <Box position="absolute" top={0} left={0}>
+            <Box position="absolute" top={0} left={0} width={WIDE_CELLS}>
               <Svg source={GLASS_SHEEN} alt="" width={2400} height={40} />
             </Box>
-            <Box position="absolute" top={0} left={0} display="none" hover={{ display: 'flex' }}>
+            <Box position="absolute" top={0} left={0} width={WIDE_CELLS} display="none" hover={{ display: 'flex' }}>
               <Svg source={GLIMMER} alt="" width={GLIMMER_W} height={GLIMMER_H} />
             </Box>
             <Svg source={drawn.source} alt={`${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`} />
-            {j.prUrl ? prLink(j) : ''}
+            {j.prUrl ? (
+              <Box key={`prrow-${j.id}`} flexDirection="row" alignItems="center" columnGap={1}>
+                <Svg source={prLineSvg(`PR ${j.pr ?? ''}`.trim(), CW * 0.8, PANE_CELL_REAL / PANE_CELL_PX).source} alt={`PR ${j.pr ?? ''}`} />
+                <Link key={`pr-${j.id}`} href={j.prUrl} label="↗" />
+              </Box>
+            ) : (
+              ''
+            )}
             {/* An exact 10px under the last line: a cell of padding was too much. */}
             <Svg source={SPACER} alt="" width={1} height={10} />
           </Box>,
@@ -2027,7 +2042,7 @@ export const register: Register = (on, options) => {
       const pct = Math.round(bar.ratio * 100)
       return (
         <Box key="savvy-glass" position="relative" overflow="hidden" flexDirection="row" alignItems="center" columnGap={2} paddingX={1} borderStyle="round" borderColor={GLASS_EDGE} backgroundColor={GLASS_FILL}>
-          <Box key="sheen" position="absolute" top={0} left={0}>
+          <Box key="sheen" position="absolute" top={0} left={0} width={WIDE_CELLS}>
             <Svg source={GLASS_SHEEN} alt="" width={2400} height={40} />
           </Box>
           <Box flexDirection="row" alignItems="center" flexShrink={0}>
@@ -2051,13 +2066,13 @@ export const register: Register = (on, options) => {
                   clipped at its end, and the bright tip lives in the strip just past the fill. The
                   bar's own colour lies underneath, so the fill shows even if the drawing doesn't. */}
               <Box key="laser-fill" width={`${pct}%`} minWidth={0} height={1} position="relative" overflow="hidden" backgroundColor={bar.color}>
-                <Box key="laser-beam" position="absolute" top={0} left={0}>
+                <Box key="laser-beam" position="absolute" top={0} left={0} width={WIDE_CELLS}>
                   <Svg key="beam" source={LASER_BEAM} alt="" width={LASER_W} height={LASER_H} />
                 </Box>
               </Box>
               {pct > 0 && pct < 100 ? (
                 <Box key="laser-tail" flexGrow={1} height={1} position="relative" overflow="hidden">
-                  <Box key="laser-sparks" position="absolute" top={0} left={0}>
+                  <Box key="laser-sparks" position="absolute" top={0} left={0} width={8}>
                     <Svg key="sparks" source={LASER_SPARKS} alt="" width={SPARKS_W} height={LASER_H} />
                   </Box>
                 </Box>
