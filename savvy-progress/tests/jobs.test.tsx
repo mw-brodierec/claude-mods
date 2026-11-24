@@ -394,6 +394,9 @@ test('Now and Next come from the jobs: running first, else waiting; then the nex
   expect(nowNext(b)).toEqual({ now: 'Job 2 Watering schedule', next: 'Job 4 Harvest log' })
   const idle = mergeBuild(b, { jobs: [{ id: 'water', status: 'shipped' }] }, 2_000, '/p')
   expect(nowNext(idle).now).toBe('Job 3 Frost alerts (waiting on a weather API key)')
+  // The orchestrator's own order wins; else the summary's "Next:" sentence; list order last.
+  expect(nowNext(mergeBuild(b, { summary: '1 of 5 shipped. Next: mobile, then harvest.' }, 3_000, '/p')).next).toBe('mobile, then harvest')
+  expect(nowNext(mergeBuild(b, { next: ['mobile', 'seeds', 'harvest'] }, 3_000, '/p')).next).toBe('Job 5 Mobile layout · Job 4 Harvest log')
 })
 
 // Marc: a job's PR link sits inside its card, and the pane has a Refresh button that re-reads everything.

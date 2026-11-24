@@ -130,6 +130,8 @@ export type Build = {
   isFinished: boolean
   /** Marc: CLI ids of the sessions that reported this build (the orchestrators); their agents count as the build's. */
   orchestrators?: string[]
+  /** Marc: job ids in the order they run next, as the orchestrator set it; the header's Next line follows it. */
+  next?: string[]
 }
 
 declare module 'claude-code' {

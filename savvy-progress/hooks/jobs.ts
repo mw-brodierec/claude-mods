@@ -135,6 +135,8 @@ export type JobsInput = {
   jobs?: JobInput[]
   remove?: string[]
   finished?: boolean
+  /** Job ids in the order they run next. */
+  next?: string[]
 }
 
 const FIELDS = ['label', 'title', 'detail', 'waitingOn', 'prUrl'] as const
@@ -198,6 +200,7 @@ export const mergeBuild = (prev: Build | null, input: JobsInput, at: number, pro
     if (input.memo.trim()) next.memo = input.memo.trim()
     else delete next.memo
   }
+  if (input.next) next.next = input.next.map(x => x.trim()).filter(Boolean)
   return next
 }
 
@@ -230,8 +233,14 @@ export const nowNext = (b: Build): { now: string; next: string } => {
   const now = running.length
     ? running.map(name).join(' · ')
     : of('waiting').map(j => `${name(j)}${j.waitingOn ? ` (waiting on ${j.waitingOn})` : ''}`).join(' · ')
+  // Next, in the build's own order: the ids the orchestrator set (`next`), else the "Next: …"
+  // sentence of the summary it wrote, else the first two planned in list order (a guess).
+  const byId = new Map(b.jobs.map(j => [j.id, j]))
+  const set = (b.next ?? []).map(id => byId.get(id)).filter((j): j is Job => j !== undefined && j.status !== 'shipped')
+  const said = /\bNext:\s*(.+?)(?:\.\s|\.?$)/.exec(b.summary ?? '')?.[1]?.trim()
   const queued = of('planned').length ? of('planned') : of('later')
-  return { now, next: queued.slice(0, 2).map(name).join(' · ') }
+  const next = set.length ? set.slice(0, 3).map(name).join(' · ') : said || queued.slice(0, 2).map(name).join(' · ')
+  return { now, next }
 }
 
 // The tool's answer: the whole list back, so a fresh orchestrator can pick the build up.

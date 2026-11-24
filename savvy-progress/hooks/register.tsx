@@ -1311,6 +1311,11 @@ export const register: Register = (on, options) => {
             },
           },
           remove: { type: 'array', items: { type: 'string' }, description: 'Job ids to drop from the list.' },
+          next: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Job ids in the order they run next (the header shows the first three as "Next"). Send it whenever the plan changes; without it the header guesses.',
+          },
           finished: { type: 'boolean', description: 'True once every job has shipped or been dropped.' },
         },
         required: ['build'],
@@ -1357,7 +1362,7 @@ export const register: Register = (on, options) => {
     const at = await $.clock.now()
     const prev = (await loadBuild($, id)) ?? (cur?.id === id ? cur : null)
     // Only a name and no build by it: a lookup that missed. List what exists rather than start an empty build.
-    const isLookup = !input.jobs?.length && !input.remove?.length && input.summary === undefined && input.memo === undefined && input.finished === undefined
+    const isLookup = !input.jobs?.length && !input.remove?.length && !input.next && input.summary === undefined && input.memo === undefined && input.finished === undefined
     if (!prev && isLookup) {
       let names: string[] = []
       try {
@@ -1379,7 +1384,7 @@ export const register: Register = (on, options) => {
         sessions: [...new Set(j.sessions.flatMap(x => [x, ...side.filter(ss => ss.name && ss.name === x).map(ss => ss.id)]))],
       })),
     }
-    const hasChange = Boolean(input.jobs?.length || input.remove?.length || input.summary !== undefined || input.memo !== undefined || input.finished !== undefined || !prev)
+    const hasChange = Boolean(input.jobs?.length || input.remove?.length || input.next || input.summary !== undefined || input.memo !== undefined || input.finished !== undefined || !prev)
     if (hasChange) await saveBuild($, linked)
     await update($, build, () => (hasChange ? linked : prev ?? linked))
     if (linked.jobs.length && !linked.isFinished) await autoOpen($, `build:${linked.id}`)

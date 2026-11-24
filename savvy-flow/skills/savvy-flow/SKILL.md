@@ -31,11 +31,11 @@ When delegating, pass the task's `title` verbatim as the Agent tool's `descripti
 A **build** is work that ships as several PRs: each PR is a **job**, run by one or more workers or side sessions. Whenever the plan has two or more jobs, keep the build's job list current with `mcp__savvy-progress__jobs` (skip silently if the tool is not there). The list lives in a file per build, so it outlives this session; the savvy-progress panel shows it beside the agents, and the band above the prompt shows jobs shipped out of all.
 
 - **Resume first.** At the start of a session that continues a build, call it with only `build` (the build's name) and read the list it returns before planning anything.
-- **On planning**: seed every job (`id`, `title`, one-line `detail`, `status` `planned`, or `later` for jobs parked outside this build's scope), plus `memo` (the build memo's path or link) and a one- or two-sentence `summary` of where the build stands.
+- **On planning**: seed every job (`id`, `title`, one-line `detail`, `status` `planned`, or `later` for jobs parked outside this build's scope), plus `memo` (the build memo's path or link), a one- or two-sentence `summary` of where the build stands, and `next`: the job ids in the order they will run (the panel's "Next" line follows it).
 - **When a job starts**: `status: "running"` and `sessions` (the side session short names or `local_…` ids, or the Agent `description`s, doing it).
 - **When a job is blocked**: `status: "waiting"` and `waitingOn` (who or what, in a few words: "Marc's yes on the ALTER", "vendor API key").
 - **When its PR opens**: `pr` and `prUrl`. **When the PR merges** (verified, not assumed): `status: "shipped"`.
-- **When the plan changes**: add or `remove` jobs, and refresh `summary` whenever the overall picture moves.
+- **When the plan changes**: add or `remove` jobs, send `next` again in the new order, and refresh `summary` whenever the overall picture moves.
 - **At the end**: `finished: true` once every job has shipped or been dropped.
 
 Send only the fields that changed: jobs upsert by `id`, and the mod stamps each job's `updated` date and derives the counts. `progress` stays for the task list inside the current job.

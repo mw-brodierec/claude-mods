@@ -99,12 +99,15 @@ export const glassBar = (x: number, y: number, w: number, h: number, segments: {
 // transparent but for the tinted edge. The pane stacks it on the card, hidden, and the app's own
 // hover reveals it, so both stay plain images: no interactive frame, so none of its padding gaps.
 export const glowOnly = (W: number, H: number, tint: string, r = GLASS.radius): string => {
-  // Marc: more glow, less stroke. Two blurred rings clipped to the card's own rounded edge, so the
-  // light pours inward from the border and never reaches the drawing's square edge (where it
-  // would be cut off into a rectangle), over a faint hairline on the border itself.
+  // Marc: subtle. A soft ring of the card's colour inside its rounded edge, at a quarter of the
+  // first try's strength so it never clashes with the text, and a glimmer: a band of light that
+  // flashes across the card every couple of seconds while the pointer is on it. All clipped to the
+  // card's outline, so nothing reaches the drawing's square edge.
   const x = GLASS.inset
   const w = W - x * 2
   const h = H - x * 2
   const ring = (sw: number, extra: string) => `<rect x="${x}" y="${x}" width="${w}" height="${h}" rx="${r}" fill="none" stroke="${tint}" stroke-width="${sw}" ${extra}/>`
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs><clipPath id="hc"><rect x="${x}" y="${x}" width="${w}" height="${h}" rx="${r}"/></clipPath><filter id="hw" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="4"/></filter><filter id="hn" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="2"/></filter></defs><g clip-path="url(#hc)">${ring(12, 'filter="url(#hw)" opacity=".65"')}${ring(5, 'filter="url(#hn)" opacity=".75"')}</g>${ring(0.8, 'opacity=".5"')}</svg>`
+  const band = Math.max(40, w * 0.22)
+  const style = `<style>.gm{animation:gm 2.6s cubic-bezier(.4,0,.2,1) infinite}@keyframes gm{0%{transform:translateX(${-band * 1.5}px)}45%,100%{transform:translateX(${W + band}px)}}@media (prefers-reduced-motion:reduce){.gm{animation:none;opacity:0}}</style>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${style}<defs><clipPath id="hc"><rect x="${x}" y="${x}" width="${w}" height="${h}" rx="${r}"/></clipPath><filter id="hw" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="3"/></filter><linearGradient id="hg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".16"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><g clip-path="url(#hc)">${ring(8, 'filter="url(#hw)" opacity=".18"')}<g class="gm"><rect x="0" y="${-H}" width="${band}" height="${H * 3}" fill="url(#hg)" transform="skewX(-20)"/></g></g>${ring(0.8, 'opacity=".35"')}</svg>`
 }
