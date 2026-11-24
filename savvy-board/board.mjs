@@ -33,16 +33,12 @@ export { nowNext, summaryLine }
 // Mod values: rows from the last 12h; a "running" row in a file not saved for 60s lost its process.
 export const FLEET_MS = 12 * 3600_000
 export const FLEET_STALE_MS = 60_000
-const RECENT_MS = 3 * 24 * 3600_000
-
 const isBuild = v => typeof v === 'object' && v !== null && typeof v.id === 'string' && Array.isArray(v.jobs)
 
-// The build to show: the newest unfinished one with jobs, touched in the last three days (the mod's
-// last fallback in latestBuildFor; the board has no project of its own to match).
-export const pickBuild = (builds, at) =>
-  builds
-    .filter(b => isBuild(b) && !b.isFinished && b.jobs.length > 0 && at - b.updatedAt < RECENT_MS)
-    .sort((a, z) => z.updatedAt - a.updatedAt)[0] ?? null
+// The build to show: the newest unfinished one with jobs. Unlike the mod's last fallback (three days),
+// any age: a build can wait weeks on one job, and an always-on board shouldn't drop it.
+export const pickBuild = builds =>
+  builds.filter(b => isBuild(b) && !b.isFinished && b.jobs.length > 0).sort((a, z) => z.updatedAt - a.updatedAt)[0] ?? null
 
 // Every session's saved agent rows ({ name: '<cli id>.json', data: { savedAt, runs } }), with the
 // stale-running rule: a running row whose file stopped its 15s heartbeat shows finished at its last save.
@@ -152,10 +148,11 @@ export const render = (v, W, opts = {}) => {
   const AW = Math.min(CW, 900)
   const isWorking = v.running.length > 0
   const h3 = (k, text, cls = '') => `<h3 data-k="${k}"${cls ? ` class="${cls}"` : ''}>${esc(text)}</h3>`
-  const agentCard = (a, prefix) => {
+  // Other chats' cards tick with the 12s scan (`opts.outsideAt`), not every second: dozens of crabs.
+  const agentCard = (a, prefix, at = v.at) => {
     const key = `${prefix}${a.id}`
-    const open = isLocal(a.id) && a.link ? `<button class="open" data-open="${esc(a.id)}">Open chat ↗</button>` : ''
-    return `<div class="agent" data-k="${esc(key)}" style="--tint:${tintOf(a)}" title="${esc(`${a.description || a.type}: ${modelName(a.model)}`)}"><div data-k="s">${inline(agentSvg(AW, a, v.at), key)}</div>${open}</div>`
+    const open = isLocal(a.id) && a.link ? `<button class="open" data-k="open" data-open="${esc(a.id)}">Open chat ↗</button>` : ''
+    return `<div class="agent" data-k="${esc(key)}" style="--tint:${tintOf(a)}" title="${esc(`${a.description || a.type}: ${modelName(a.model)}`)}"><div data-k="s">${inline(agentSvg(AW, a, at), key)}</div>${open}</div>`
   }
 
   let jobsCol = ''
@@ -170,7 +167,8 @@ export const render = (v, W, opts = {}) => {
     const card = j => {
       const tint = JOB_THEME.status[j.status]
       const drawn = jobCardSvg(CW - CARD_PAD * 2, b, j, runLines(runsOf(j, v.list), v.at), WORDS.card, { isBare: true, hasLink: Boolean(j.prUrl) })
-      const pr = j.prUrl && isGitHub(j.prUrl) ? `<a class="pr" data-k="pr" href="${esc(j.prUrl)}" target="_blank" rel="noopener">PR ${esc(j.pr ?? '')} ↗</a>` : ''
+      // The drawing leaves the PR to this line whenever there is a URL; one that isn't a GitHub PR gets no link, only its number.
+      const pr = !j.prUrl ? '' : isGitHub(j.prUrl) ? `<a class="pr" data-k="pr" href="${esc(j.prUrl)}" target="_blank" rel="noopener">PR ${esc(j.pr ?? '')} ↗</a>` : j.pr ? `<span class="pr" data-k="pr">PR ${esc(j.pr)}</span>` : ''
       return `<div class="job" data-k="job-${esc(j.id)}" style="--tint:${tint}" title="${esc(`${labelOf(b, j)}: ${j.title}`)}"><div data-k="s">${inline(drawn.source, `job-${j.id}`)}</div>${pr}</div>`
     }
     const groups = GROUPS.map(g => ({ g, list: b.jobs.filter(j => j.status === g) })).filter(x => x.list.length)
@@ -194,7 +192,7 @@ export const render = (v, W, opts = {}) => {
     v.finished.length ? `<button class="fold full" data-k="h-done" data-fold="done">Finished · ${v.finished.length}</button>` : '',
     `<div class="group full" data-k="g-done" data-group="done">${v.finished.map(a => agentCard(a, 'a-')).join('')}</div>`,
     v.outside.length ? h3('h-other', `Other chats · ${v.outside.length}`, 'outside') : '',
-    opts.all ? `<div class="group outside" data-k="g-other">${v.outside.map(a => agentCard(a, 'o-')).join('')}</div>` : '',
+    opts.all ? `<div class="group outside" data-k="g-other">${v.outside.map(a => agentCard(a, 'o-', Math.min(v.at, opts.outsideAt ?? v.at))).join('')}</div>` : '',
   ].join('')
 
   return `<div class="cols${isWide ? ' wide' : ''}" data-k="cols" style="--cw:${CW}px">${b ? `<section class="col jobs" data-k="jobs">${jobsCol}</section>` : ''}<section class="col agents" data-k="agents">${agentsCol}</section></div>`

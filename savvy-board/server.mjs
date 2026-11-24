@@ -81,7 +81,7 @@ const clients = new Set()
 
 function tick() {
   const at = Date.now()
-  build = pickBuild(readDir(join(ROOT, 'builds')).map(f => f.data), at)
+  build = pickBuild(readDir(join(ROOT, 'builds')).map(f => f.data))
   const agentsDir = join(ROOT, 'agents')
   const files = freshFiles(agentsDir, at).flatMap(name => {
     try {
@@ -92,7 +92,7 @@ function tick() {
   })
   const v = view(build, scope(build, side, fleetRows(files, at)), at)
   for (const c of clients) {
-    const html = render(v, c.width, { all: c.all })
+    const html = render(v, c.width, { all: c.all, outsideAt: lastScan })
     if (html === c.last) continue
     c.last = html
     c.res.write(`data: ${JSON.stringify({ html, outside: v.outside.length, title: build ? build.name : 'Agents' })}\n\n`)

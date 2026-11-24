@@ -31,12 +31,13 @@ const agent = (id, extra = {}) => ({
   startedAt: AT - 20 * MIN, endedAt: AT - 10 * MIN, contextTokens: 1000, contextMax: 1_000_000, tokens: 100, costUsd: 1, steps: 1, round: 1, ...extra,
 })
 
-test('pickBuild: the newest unfinished build with jobs from the last three days', () => {
-  const old = { ...BUILD, id: 'old', updatedAt: AT - 4 * 24 * 60 * MIN }
+test('pickBuild: the newest unfinished build with jobs, however long it has waited', () => {
+  const old = { ...BUILD, id: 'old', updatedAt: AT - 30 * 24 * 60 * MIN }
   const done = { ...BUILD, id: 'done', isFinished: true, updatedAt: AT }
   const empty = { ...BUILD, id: 'empty', jobs: [], updatedAt: AT }
-  assert.equal(pickBuild([old, done, empty, BUILD, { junk: true }], AT)?.id, 'garden')
-  assert.equal(pickBuild([old], AT), null)
+  assert.equal(pickBuild([old, done, empty, BUILD, { junk: true }])?.id, 'garden')
+  assert.equal(pickBuild([old, done])?.id, 'old')
+  assert.equal(pickBuild([done, empty]), null)
 })
 
 test('fleetRows: a running row whose file stopped saving shows finished at its last save', () => {
@@ -98,6 +99,7 @@ test('Now/Next come from the jobs; Next follows the build\'s own order when set'
 test('render: every drawing gets its own ids, and only GitHub PR links and local chats get links', () => {
   const side = [chat('local_side1', 'cli-side1', { isOther: false, parentCli: 'cli-orch', running: true })]
   const html = render(view({ ...BUILD, jobs: [...BUILD.jobs, job('j5', 'shipped', { prUrl: 'javascript:alert(1)', pr: '8' })] }, scope(BUILD, side, []), AT), 420)
+  assert.match(html, /<span class="pr" data-k="pr">PR 8<\/span>/)
   assert.ok(!/<style>/.test(html))
   const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(m => m[1])
   assert.equal(new Set(ids).size, ids.length)
