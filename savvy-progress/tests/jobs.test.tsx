@@ -357,6 +357,33 @@ test('a finished session sleeps on its card and a running one does not', async (
   const card = (name: string) => svgs.find(x => x.props.alt.startsWith(name))?.props.source ?? ''
   expect(card('Watering schedule')).toContain('class="s zz"')
   expect(card('Frost alerts')).not.toContain('class="s zz"')
-  expect(card('Frost alerts')).toContain('class="glive"')
+  await ui.unmount()
+})
+
+// Marc: a card glows only under the pointer: a hidden layer the app's hover reveals, and every
+// drawing stays a plain image (an interactive frame left uneven gaps).
+test('cards glow only on hover, through a hidden layer over a plain image', async ($, on) => {
+  harness(on)
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
+  await new Promise(r => setTimeout(r, 30))
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, bodyColumns: 60 } })
+  // findAll leaves hover styles out; the drawn tree keeps them.
+  type Node = { type?: string; key?: string; props?: Record<string, unknown>; hover?: { display?: string }; children?: unknown[] }
+  const all: Node[] = []
+  const walk = (n: unknown): void => {
+    if (!n || typeof n !== 'object') return
+    all.push(n as Node)
+    for (const c of (n as Node).children ?? []) walk(c)
+  }
+  walk(await ui.drawn())
+  // In the drawn tree a Box's key, the hover scope, sits in its props.
+  const card = all.find(x => x.props?.key === 'local_w1')
+  expect(card?.props?.position).toBe('relative')
+  const layers = all.filter(x => x.props?.display === 'none' && x.hover?.display === 'flex' && x.props?.position === 'absolute')
+  expect(layers.length).toBeGreaterThan(1)
+  expect(layers.every(x => x.props?.key === undefined), 'a keyed layer would be its own hover scope and never light').toBe(true)
+  const svgs = (await ui.findAll({ type: 'Svg' })) as { props: { source: string; isInteractive?: boolean } }[]
+  expect(svgs.some(x => x.props.isInteractive)).toBe(false)
+  expect(svgs.some(x => /class="glive"|class="gfaint"/.test(x.props.source))).toBe(false)
   await ui.unmount()
 })

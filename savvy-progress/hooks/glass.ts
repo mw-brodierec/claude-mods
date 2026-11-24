@@ -25,9 +25,6 @@ export const GLASS_CSS = `<style>
 .gsw0{stop-color:#ffffff;stop-opacity:0}.gsw1{stop-color:#ffffff;stop-opacity:.7}
 .gglow,.gsweep{opacity:0}
 .gglow{transition:opacity .3s ease}
-.glive{opacity:.75;animation:gbr 3.6s ease-in-out infinite}.gfaint{opacity:.32}
-@keyframes gbr{50%{opacity:.35}}
-@media (prefers-reduced-motion:reduce){.glive{animation:none}}
 .gp:hover .gglow{opacity:.95}
 .gsweep{transform-box:fill-box}
 .gp:hover .gsweep{animation:gsw .85s ease-out}
@@ -53,9 +50,7 @@ export const glassDefs = (id = 'g'): string => `<defs>
 <filter id="${id}d" x="-10%" y="-20%" width="120%" height="160%"><feDropShadow dx="0" dy="${GLASS.shadowY}" stdDeviation="${GLASS.shadowBlur}" class="gsh"/></filter>
 </defs>`
 
-// `glow` (Marc): the tint always on, inside the panel's own edge, so it needs no hover frame and
-// no extra room: `live` breathes slowly, `faint` holds still.
-type PanelOpts = { r?: number; tint?: string; id?: string; isQuiet?: boolean; glow?: 'live' | 'faint' }
+type PanelOpts = { r?: number; tint?: string; id?: string; isQuiet?: boolean }
 
 // One glass panel at (x, y, w, h): shadow, the tint glowing through, frost, sheen, rim.
 // `tint` is the colour its edge glows in under the pointer; a quiet panel has none, only the shimmer.
@@ -72,11 +67,7 @@ export const glassPanel = (x: number, y: number, w: number, h: number, o: PanelO
     `<g class="gp${o.tint && !o.isQuiet ? '' : ' q'}">`,
     `<clipPath id="${clip}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}"/></clipPath>`,
     `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="url(#${id}f)" filter="url(#${id}d)"/>`,
-    `<g clip-path="url(#${clip})"><rect x="${x}" y="${y}" width="${w}" height="${sheenH}" fill="url(#${id}s)"/><rect class="gsweep" x="${x}" y="${y}" width="${sweepW}" height="${h}" fill="url(#${id}w)"/>${
-      o.glow && o.tint
-        ? `<g class="${o.glow === 'live' ? 'glive' : 'gfaint'}"><rect x="${x + 1}" y="${y + 1}" width="${w - 2}" height="${h - 2}" rx="${r - 1}" fill="none" stroke="${o.tint}" stroke-width="7" filter="url(#${id}b)"/><rect x="${x + 0.8}" y="${y + 0.8}" width="${w - 1.6}" height="${h - 1.6}" rx="${r - 0.8}" fill="none" stroke="${o.tint}" stroke-width="1.2" opacity=".8"/></g>`
-        : ''
-    }</g>`,
+    `<g clip-path="url(#${clip})"><rect x="${x}" y="${y}" width="${w}" height="${sheenH}" fill="url(#${id}s)"/><rect class="gsweep" x="${x}" y="${y}" width="${sweepW}" height="${h}" fill="url(#${id}w)"/></g>`,
     `<rect x="${x + 0.5}" y="${y + 0.5}" width="${w - 1}" height="${h - 1}" rx="${r - 0.5}" fill="none" class="gedge"/>`,
     `<rect x="${x + 1}" y="${y + 1}" width="${w - 2}" height="${h - 2}" rx="${r - 1}" fill="none" stroke="url(#${id}r)" stroke-width="1.2"/>`,
     glow,
@@ -102,4 +93,14 @@ export const glassBar = (x: number, y: number, w: number, h: number, segments: {
     `<g clip-path="url(#${clip})">${fills}<rect x="${x}" y="${y}" width="${w}" height="${h / 2}" fill="#ffffff" opacity=".28"/></g>`,
     `<rect x="${x + 0.5}" y="${y + 0.5}" width="${w - 1}" height="${h - 1}" rx="${(h - 1) / 2}" fill="none" stroke="url(#${id}r)" stroke-width="1"/>`,
   ].join('')
+}
+
+// Marc: the hover glow as a drawing of its own, the same size as the card it lights and
+// transparent but for the tinted edge. The pane stacks it on the card, hidden, and the app's own
+// hover reveals it, so both stay plain images: no interactive frame, so none of its padding gaps.
+export const glowOnly = (W: number, H: number, tint: string, r = GLASS.radius): string => {
+  const x = GLASS.inset
+  const w = W - x * 2
+  const h = H - x * 2
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs><filter id="hb" x="-20%" y="-40%" width="140%" height="180%"><feGaussianBlur stdDeviation="${GLASS.glowBlur}"/></filter></defs><rect x="${x + 0.5}" y="${x + 0.5}" width="${w - 1}" height="${h - 1}" rx="${r - 0.5}" fill="none" stroke="${tint}" stroke-width="2.6" filter="url(#hb)" opacity=".95"/><rect x="${x + 0.5}" y="${x + 0.5}" width="${w - 1}" height="${h - 1}" rx="${r - 0.5}" fill="none" stroke="${tint}" stroke-width="1.1"/></svg>`
 }

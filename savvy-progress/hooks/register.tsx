@@ -21,7 +21,7 @@ import {
   xml,
 } from './jobs'
 import type { JobsInput, RunLine } from './jobs'
-import { GLASS, GLASS_CSS, glassBar, glassDefs, glassPanel } from './glass'
+import { GLASS, GLASS_CSS, glassBar, glassDefs, glassPanel, glowOnly } from './glass'
 
 const flow = atom({ plugin: 'savvy-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
@@ -1058,7 +1058,7 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   return svg(
     W,
     AGENT_H,
-    `${glassPanel(GI, GI, W - GI * 2, AGENT_H - GI * 2, { tint: color, isQuiet: a.status !== 'running', glow: a.status === 'running' ? 'live' : 'faint' })}
+    `${glassPanel(GI, GI, W - GI * 2, AGENT_H - GI * 2, { tint: color, isQuiet: a.status !== 'running' })}
 ${crab(ox, 20, `${costume}#${jerseyOf(a.id)}`, false, a.status === 'running', CRAB_SCALE, isAsleep)}${zs}
 <text class="t" x="${tx}" y="${GI + 20}" font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
 <text x="${tx}" y="${GI + 36}" font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tier)}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
@@ -1067,6 +1067,18 @@ ${steps && stepsW > 30 ? `<text class="t" x="${tx + statsW + 14}" y="${GI + 51}"
 ${glassBar(tx, GI + 57, barW, 6, [{ w: Math.round(barW * fill), color: progress === null ? '#9a9a96' : color }])}
 ${statusMark(W - GI - 14, GI + 16, a.status, color)}`,
   )
+}
+
+// The colour an agent card glows in on hover: its tier's, else its costume's.
+const tintOf = (a: AgentRun): string => {
+  const tier = tierOf(a.type)
+  return colorOf(tier === 'other' ? costumeOf(a.type) : tier)
+}
+
+// The size a drawing was made at, read from its root element.
+const sizeOf = (source: string): [number, number] => {
+  const m = /<svg[^>]*?width="([\d.]+)"[^>]*?height="([\d.]+)"/.exec(source)
+  return [Number(m?.[1] ?? 0), Number(m?.[2] ?? 0)]
 }
 
 const plannedSvg = (W: number, p: Planned): string => {
@@ -1598,6 +1610,20 @@ export const register: Register = (on, options) => {
 
     if (e.surface === 'desktop' && 'Svg' in ui) {
       const { Svg } = ui
+      // Marc: a card glows in its colour only under the pointer. The card is keyed, so it is the
+      // hover scope; the glow layer on top of it is hidden until then and has no key of its own.
+      // The layer spans the card's width, so the app fits both drawings to the same size.
+      const glowCard = (key: string, source: string, alt: string, tint: string) => {
+        const [gw, gh] = sizeOf(source)
+        return (
+          <Box key={key} position="relative">
+            <Svg source={source} alt={alt} />
+            <Box position="absolute" top={0} left={0} width="100%" display="none" hover={{ display: 'flex' }}>
+              <Svg source={glowOnly(gw, gh, tint)} alt="" />
+            </Box>
+          </Box>
+        )
+      }
       const W = Math.max(240, Math.min(1400, Math.round((e.props.bodyColumns || 40) * PANE_CELL_PX) - 8))
       // Marc: side by side wherever both columns stay legible (MIN_COL each), stacked otherwise; no switch.
       const isWide = Boolean(b) && W >= MIN_COL * 2 + COL_GAP_PX
@@ -1630,13 +1656,13 @@ export const register: Register = (on, options) => {
           {isEmpty && <Text dimColor>{s.empty}</Text>}
           {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
           {running.flatMap(a => [
-            <Svg key={a.id} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} />,
+            glowCard(a.id, agentSvg(AW, a, at), `${a.description}: ${modelName(a.model)}, ${s.isRunning}`, tintOf(a)),
             opener(a),
           ])}
           {finished.length > 0 && toggleDone}
           {!p.isDoneCollapsed &&
             finished.flatMap(a => [
-              <Svg key={a.id} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} />,
+              glowCard(a.id, agentSvg(AW, a, at), `${a.description}: ${modelName(a.model)}, ${s.isFinished}`, tintOf(a)),
               opener(a),
             ])}
           {planned.length > 0 && section('h-plan', `${s.planned} · ${planned.length}`)}
@@ -1646,7 +1672,7 @@ export const register: Register = (on, options) => {
           {p.isShowingAll && outside.length > 0 && section('h-other', `${s.otherChats} · ${outside.length}`)}
           {p.isShowingAll &&
             outside.flatMap(a => [
-              <Svg key={`o-${a.id}`} source={agentSvg(AW, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${a.status === 'running' ? s.isRunning : s.isFinished}`} />,
+              glowCard(`o-${a.id}`, agentSvg(AW, a, at), `${a.description}: ${modelName(a.model)}, ${a.status === 'running' ? s.isRunning : s.isFinished}`, tintOf(a)),
               opener(a),
             ])}
         </Box>
@@ -1657,7 +1683,7 @@ export const register: Register = (on, options) => {
       const card = (j: Job) => {
         const drawn = jobCardSvg(CW, b, j, runLines(runsOf(j, list), at), { updated: s.updated, waitingOn: s.waitingOn, more: s.more })
         return [
-          <Svg key={`job-${j.id}`} source={drawn.source} alt={`${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`} />,
+          glowCard(`job-${j.id}`, drawn.source, `${labelOf(b, j)}: ${j.title}, ${s.groups[j.status]}${j.waitingOn ? `, ${s.waitingOn} ${j.waitingOn}` : ''}`, JOB_COLORS[j.status]),
           prLink(j),
         ]
       }
