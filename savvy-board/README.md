@@ -1,6 +1,6 @@
 # savvy board
 
-The savvy-progress build and agents view as a small always-on window on the Mac desktop, apart from any Claude session. A mod's pane lives and dies with one session's process; this board reads the same files every session already writes, so it keeps going through reloads, restarts and closed chats.
+The savvy-progress build and agents view as a small always-on Mac app, **Savvy Flow** (its own Dock tile with Clawd; no Chrome), apart from any Claude session. A mod's pane lives and dies with one session's process; this board reads the same files every session already writes, so it keeps going through reloads, restarts and closed chats.
 
 - **What it shows**: the newest unfinished build (header with Now/Next, the four tiles, the saber bar, a card per job with its PR link), then the build's agents and side sessions with cost, tokens and time ticking live. Other chats sit behind **◎ All** and never count in the totals.
 - **Where the data comes from**: `~/.claude/savvy-progress/builds/*.json`, `~/.claude/savvy-progress/agents/*.json` (a "running" row whose file stops its heartbeat for 60s shows finished), and `savvy-progress/hooks/sessions.py --live` every 12s.
@@ -15,7 +15,15 @@ The savvy-progress build and agents view as a small always-on window on the Mac 
 savvy-board/start-board.sh
 ```
 
-This starts the server on `http://127.0.0.1:7447` if it isn't running and opens a 420×900 Chrome app window in the top-right corner (its own Chrome profile, so your browser is untouched). Pass a width and height to change the size.
+This starts the server on `http://127.0.0.1:7447` if it isn't running and opens `~/Applications/Savvy Flow.app` (a WebKit window, 420×900 in the top-right corner the first time, then wherever you left it). macOS keeps one copy: running it again brings the window forward, and closing the window quits the app.
+
+The app is built from `app/` on first use, or by hand after changing `app/SavvyFlow.swift` or `app/icon.svg` (needs the Command Line Tools' `swiftc`):
+
+```bash
+savvy-board/app/build-app.sh
+```
+
+It used to be a Chrome `--app` window with its own profile. Each launch was a separate Chrome process, so the Dock's recent-apps section filled with extra Google Chrome tiles.
 
 To keep the server running across logins (a user LaunchAgent, no sudo):
 

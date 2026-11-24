@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Savvy Flow app icon: Pixel Clawd (the same rects as crabBody in ../pane.ts) on the macOS icon grid. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34312D"/><stop offset="1" stop-color="#1F1E1D"/></linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="185" fill="none" stroke="#D97757" stroke-opacity=".35" stroke-width="3"/>
+  <g transform="translate(212,40) scale(20)" shape-rendering="crispEdges">
+    <rect x="7" y="10" width="16" height="12" fill="#D97757"/>
+    <rect x="3" y="14" width="4" height="4" fill="#D97757"/>
+    <rect x="23" y="14" width="4" height="4" fill="#D97757"/>
+    <rect x="9" y="12" width="2" height="2" fill="#1F1E1D"/>
+    <rect x="19" y="12" width="2" height="2" fill="#1F1E1D"/>
+    <rect x="7" y="22" width="2" height="4" fill="#D97757"/>
+    <rect x="17" y="22" width="2" height="4" fill="#D97757"/>
+    <rect x="11" y="22" width="2" height="4" fill="#D97757"/>
+    <rect x="21" y="22" width="2" height="4" fill="#D97757"/>
+  </g>
+  <text x="512" y="800" text-anchor="middle" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="96" font-weight="800" letter-spacing="4" fill="#F4EFE6">SAVVY FLOW</text>
+</svg>
