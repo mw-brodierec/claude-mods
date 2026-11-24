@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { FLEET_STALE_MS, fleetRows, mergeSessions, nowNext, pickBuild, render, scope, sessionCalls, view } from './board.mjs'
+import { FLEET_STALE_MS, buildOptions, fleetRows, mergeSessions, nowNext, pickBuild, render, scope, sessionCalls, view, watchedScope } from './board.mjs'
 
 const AT = 1_800_000_000_000
 const MIN = 60_000
@@ -38,6 +38,16 @@ test('pickBuild: the newest unfinished build with jobs, however long it has wait
   assert.equal(pickBuild([old, done, empty, BUILD, { junk: true }])?.id, 'garden')
   assert.equal(pickBuild([old, done])?.id, 'old')
   assert.equal(pickBuild([done, empty]), null)
+})
+
+test('buildOptions and watchedScope: the picker lists unfinished builds first; scans cover what is watched', () => {
+  const done = { ...BUILD, id: 'done', name: 'Done build', isFinished: true, updatedAt: AT, orchestrators: ['cli-done'] }
+  const older = { ...BUILD, id: 'older', name: 'Older build', updatedAt: AT - 99 * MIN, orchestrators: ['cli-orch', 'cli-two'] }
+  const opts = buildOptions([done, older, BUILD, { junk: true }])
+  assert.deepEqual(opts.map(o => o.id), ['garden', 'older', 'done'])
+  assert.deepEqual(opts[0], { id: 'garden', name: 'Garden build', shipped: 1, total: 4, updatedAt: AT - MIN, isFinished: false })
+  assert.deepEqual(watchedScope([done, older, BUILD], new Set()).orchestrators, ['cli-orch', 'cli-two'])
+  assert.deepEqual(watchedScope([done, older, BUILD], new Set(['done'])).orchestrators, ['cli-done', 'cli-orch', 'cli-two'])
 })
 
 test('fleetRows: a running row whose file stopped saving shows finished at its last save', () => {

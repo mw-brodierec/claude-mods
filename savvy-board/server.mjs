@@ -5,12 +5,12 @@
 // Only 127.0.0.1, only this page's own requests.
 
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import { fleetRows, mergeSessions, pickBuild, render, scope, sessionCalls, SVG_CSS, view } from './board.mjs'
+import { buildOptions, fleetRows, isBuild, mergeSessions, pickBuild, render, scope, sessionCalls, SVG_CSS, view, watchedScope } from './board.mjs'
 
 const PORT = Number(process.env.SAVVY_BOARD_PORT || 7447)
 const HOST = '127.0.0.1'
@@ -21,6 +21,8 @@ const PYTHON = existsSync('/usr/bin/python3') ? '/usr/bin/python3' : 'python3'
 const TICK_MS = 1000
 // sessions.py reads every chat's metadata (~0.4s a call): every 12s, never two at once.
 const SESSIONS_MS = 12_000
+// Each window hears from the server at least this often, so it can tell live from stuck.
+const HEARTBEAT_MS = 5000
 
 const readDir = dir => {
   try {
@@ -47,10 +49,12 @@ const freshFiles = (dir, at) => {
   }
 }
 
-let build = null
+let builds = []
 let side = []
 let scanning = false
 let lastScan = 0
+// When a scan last came back whole: the page turns yellow when this grows old.
+let lastScanOk = 0
 
 const py = args =>
   new Promise(resolve =>
@@ -69,9 +73,13 @@ async function scanSessions() {
   lastScan = Date.now()
   try {
     const lists = []
-    for (const args of sessionCalls(build)) lists.push(await py(args))
+    const watching = new Set([...clients].map(c => c.build).filter(Boolean))
+    for (const args of sessionCalls(watchedScope(builds, watching))) lists.push(await py(args))
     // A failed call keeps the last read rather than blanking the board.
-    if (lists.every(Boolean)) side = mergeSessions(lists)
+    if (lists.every(Boolean)) {
+      side = mergeSessions(lists)
+      lastScanOk = Date.now()
+    }
   } finally {
     scanning = false
   }
@@ -79,9 +87,14 @@ async function scanSessions() {
 
 const clients = new Set()
 
+const status = () => `event: status\ndata: ${JSON.stringify({ at: Date.now(), scanOkAt: lastScanOk, scanning })}\n\n`
+
+// The build a window shows: the one it picked, else the newest unfinished (Auto).
+const buildFor = c => builds.find(b => b.id === c.build) ?? pickBuild(builds)
+
 function tick() {
   const at = Date.now()
-  build = pickBuild(readDir(join(ROOT, 'builds')).map(f => f.data))
+  builds = readDir(join(ROOT, 'builds')).map(f => f.data).filter(isBuild)
   const agentsDir = join(ROOT, 'agents')
   const files = freshFiles(agentsDir, at).flatMap(name => {
     try {
@@ -90,12 +103,19 @@ function tick() {
       return []
     }
   })
-  const v = view(build, scope(build, side, fleetRows(files, at)), at)
+  const fleet = fleetRows(files, at)
+  const views = new Map()
+  const options = buildOptions(builds)
+  const auto = pickBuild(builds)?.id ?? ''
   for (const c of clients) {
-    const html = render(v, c.width, { all: c.all, outsideAt: lastScan })
-    if (html === c.last) continue
-    c.last = html
-    c.res.write(`data: ${JSON.stringify({ html, outside: v.outside.length, title: build ? build.name : 'Agents' })}\n\n`)
+    const b = buildFor(c)
+    const key = b?.id ?? ''
+    if (!views.has(key)) views.set(key, view(b, scope(b, side, fleet), at))
+    const v = views.get(key)
+    const msg = JSON.stringify({ html: render(v, c.width, { all: c.all, outsideAt: lastScan }), outside: v.outside.length, title: b ? b.name : 'Agents', builds: options, current: key, auto })
+    if (msg === c.last) continue
+    c.last = msg
+    c.res.write(`data: ${msg}\n\n`)
   }
   if (at - lastScan > SESSIONS_MS) void scanSessions()
 }
@@ -116,9 +136,11 @@ const server = createServer((req, res) => {
   if (req.method === 'GET' && url.pathname === '/events') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' })
     res.write('retry: 2000\n\n')
-    const c = { res, width: Math.max(240, Math.min(1600, Number(url.searchParams.get('w')) || 400)), all: url.searchParams.get('all') === '1', last: '' }
+    const pick = url.searchParams.get('build') ?? ''
+    const c = { res, width: Math.max(240, Math.min(1600, Number(url.searchParams.get('w')) || 400)), all: url.searchParams.get('all') === '1', build: /^[\w-]{1,80}$/.test(pick) ? pick : '', last: '' }
     clients.add(c)
     req.on('close', () => clients.delete(c))
+    res.write(status())
     return void tick()
   }
   if (req.method === 'POST' && req.headers.origin === ORIGIN) {
@@ -127,9 +149,10 @@ const server = createServer((req, res) => {
       open(`claude://claude.ai/epitaxy/${id}`)
       return void res.writeHead(204).end()
     }
-    // The memo is the current build's own path, never one the page sends.
-    if (url.pathname === '/memo' && build?.memo?.startsWith('/') && existsSync(build.memo)) {
-      open(build.memo)
+    // The memo is a known build's own path, picked by the build's id, never a path the page sends.
+    const memo = builds.find(b => b.id === url.searchParams.get('build'))?.memo
+    if (url.pathname === '/memo' && memo?.startsWith('/') && existsSync(memo)) {
+      open(memo)
       return void res.writeHead(204).end()
     }
     if (url.pathname === '/refresh') {
@@ -148,6 +171,15 @@ server.on('error', e => {
 })
 server.listen(PORT, HOST, () => {
   console.log(`savvy board on ${ORIGIN}`)
+  // Where the board lives, for the savvy-progress band's 🔍 and ↻ (they open this window, not the pane).
+  try {
+    writeFileSync(join(ROOT, 'board.json'), JSON.stringify({ url: ORIGIN, start: new URL('./start-board.sh', import.meta.url).pathname }) + '\n')
+  } catch {
+    // No ~/.claude/savvy-progress yet: the band keeps opening its pane.
+  }
+  setInterval(() => {
+    for (const c of clients) c.res.write(status())
+  }, HEARTBEAT_MS)
   tick() // finds the build first, so the first scan names its sessions
   void scanSessions().then(tick)
   setInterval(tick, TICK_MS)

@@ -33,12 +33,26 @@ export { nowNext, summaryLine }
 // Mod values: rows from the last 12h; a "running" row in a file not saved for 60s lost its process.
 export const FLEET_MS = 12 * 3600_000
 export const FLEET_STALE_MS = 60_000
-const isBuild = v => typeof v === 'object' && v !== null && typeof v.id === 'string' && Array.isArray(v.jobs)
+export const isBuild = v => typeof v === 'object' && v !== null && typeof v.id === 'string' && Array.isArray(v.jobs)
 
 // The build to show: the newest unfinished one with jobs. Unlike the mod's last fallback (three days),
 // any age: a build can wait weeks on one job, and an always-on board shouldn't drop it.
 export const pickBuild = builds =>
   builds.filter(b => isBuild(b) && !b.isFinished && b.jobs.length > 0).sort((a, z) => z.updatedAt - a.updatedAt)[0] ?? null
+
+// The picker's list: every build by name, how far it got and when it last moved; unfinished first,
+// newest first. A build's name is what its orchestrator called it in the `jobs` tool.
+export const buildOptions = builds =>
+  builds
+    .filter(isBuild)
+    .sort((a, z) => Number(a.isFinished) - Number(z.isFinished) || z.updatedAt - a.updatedAt)
+    .map(b => ({ id: b.id, name: b.name, shipped: b.jobs.filter(j => j.status === 'shipped').length, total: b.jobs.length, updatedAt: b.updatedAt, isFinished: Boolean(b.isFinished) }))
+
+// What one sessions.py scan covers: every unfinished build and any finished one a window is watching.
+export const watchedScope = (builds, watching) => {
+  const list = builds.filter(b => isBuild(b) && (!b.isFinished || watching.has(b.id)))
+  return { jobs: list.flatMap(b => b.jobs), orchestrators: [...new Set(list.flatMap(b => b.orchestrators ?? []))] }
+}
 
 // Every session's saved agent rows ({ name: '<cli id>.json', data: { savedAt, runs } }), with the
 // stale-running rule: a running row whose file stopped its 15s heartbeat shows finished at its last save.

@@ -19,8 +19,16 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .controls{display:flex;flex-wrap:nowrap;gap:6px;align-items:center;margin-bottom:10px;white-space:nowrap;overflow:hidden}
 .controls button{font-size:12px;color:var(--dim);background:var(--btn);border-radius:7px;padding:3px 8px}
 .controls button:hover{color:var(--fg)}
-.controls .state{margin-left:auto;font-size:11px;color:var(--faint)}
-.controls .state.off{color:#D0453F}
+.controls .state{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim)}
+/* The status light: green live, yellow reconnecting or sessions not answering, red offline. */
+.dot{width:8px;height:8px;border-radius:50%;background:var(--c,#8a8a86);box-shadow:0 0 6px var(--c,transparent)}
+.state.ok{--c:#3B9C5F}.state.warn{--c:#D08A1E}.state.bad{--c:#D0453F}
+.state.ok .dot{animation:breathe 2.4s ease-in-out infinite}@keyframes breathe{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.state.ok .dot{animation:none}}
+
+/* Which build this window watches: Auto follows the newest unfinished one. */
+.watch{display:flex;align-items:center;gap:8px;margin:-2px 0 10px;font-size:12px;color:var(--dim)}
+.watch select{flex:1;min-width:0;font:inherit;font-size:12px;color:var(--fg);background:var(--btn);border:1px solid var(--edge);border-radius:7px;padding:3px 6px}
 
 .cols{display:flex;flex-direction:column;gap:18px}
 .cols.wide{flex-direction:row;align-items:flex-start;gap:16px}
@@ -74,8 +82,9 @@ body:not(.all) .outside{display:none}
   <button id="compact" title="Collapse to the header and the team">⊟ Collapse</button>
   <button id="all" title="List other chats too (never in the totals)">◎ All</button>
   <button id="refresh" title="Read the sessions again now">↻ Refresh</button>
-  <span class="state" id="state">connecting…</span>
+  <span class="state warn" id="state" role="status"><span class="dot"></span><span id="state-text">Connecting</span></span>
 </div>
+<div class="watch"><label for="build">Watching</label><select id="build" title="Which build this window shows"></select></div>
 <main id="board"></main>
 <script>
 // Folds and toggles live in this window's storage; every part is drawn and CSS shows what is chosen.
@@ -103,7 +112,7 @@ document.getElementById('board').addEventListener('click', e => {
   if (!t) return
   if (t.dataset.fold) toggle('fold-' + t.dataset.fold)
   else if (t.dataset.open) post('/open?id=' + encodeURIComponent(t.dataset.open))
-  else if (t.dataset.memo) post('/memo')
+  else if (t.dataset.memo) post('/memo?build=' + encodeURIComponent(current))
 })
 
 // Only what changed is replaced, so a card under the pointer keeps its hover and unchanged drawings
@@ -118,20 +127,69 @@ function morph(old, next) {
   a.forEach((c, i) => morph(c, b[i]))
 }
 
+// The build picker. The choice stays in this window ('' = Auto); a build that is gone falls back to Auto.
+const picker = document.getElementById('build')
+let chosen = ''
+try { chosen = localStorage.getItem('savvy-board:build') || '' } catch {}
+let current = ''
+let optionsSeen = ''
+const day = ms => new Date(ms).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+function fillPicker(builds, auto) {
+  const seen = JSON.stringify([builds, auto])
+  if (seen === optionsSeen) return
+  optionsSeen = seen
+  const autoName = builds.find(b => b.id === auto)?.name
+  const opt = (value, text) => Object.assign(document.createElement('option'), { value, textContent: text })
+  picker.replaceChildren(
+    opt('', autoName ? `Auto: newest (${autoName})` : 'Auto: newest unfinished build'),
+    ...builds.map(b => opt(b.id, `${b.isFinished ? '✓ ' : ''}${b.name} · ${b.shipped}/${b.total} shipped · ${day(b.updatedAt)}`)),
+  )
+  picker.value = builds.some(b => b.id === chosen) ? chosen : ''
+}
+picker.onchange = () => {
+  chosen = picker.value
+  try { localStorage.setItem('savvy-board:build', chosen) } catch {}
+  connect()
+}
+
 const board = document.getElementById('board')
 const state = document.getElementById('state')
+const stateText = document.getElementById('state-text')
 let es = null
 let width = 0
+// Status: when the server was last heard (pushes and its 5s heartbeat), when its last session scan
+// came back whole, and since when the connection has been down.
+let heardAt = 0, scanOkAt = 0, downSince = 0
+function light() {
+  const now = Date.now()
+  const [cls, text, tip] =
+    !es || es.readyState !== 1
+      ? now - downSince > 5000 ? ['bad', 'Offline', 'The board server is not answering. start-board.sh starts it.'] : ['warn', 'Reconnecting', 'Lost the board server; retrying.']
+      : now - heardAt > 15000 ? ['bad', 'No signal', 'Connected, but nothing heard for ' + Math.round((now - heardAt) / 1000) + 's.']
+      : !scanOkAt ? ['warn', 'Starting', 'Reading the sessions for the first time.']
+      : now - scanOkAt > 45000 ? ['warn', 'Sessions stale', 'sessions.py has not answered for ' + Math.round((now - scanOkAt) / 1000) + 's; jobs and agents files still update.']
+      : ['ok', 'Live', 'Updating every second; sessions read ' + Math.round((now - scanOkAt) / 1000) + 's ago.']
+  state.className = 'state ' + cls
+  stateText.textContent = text
+  state.title = tip
+}
+setInterval(light, 1000)
 function connect() {
   es?.close()
   width = board.clientWidth
-  es = new EventSource(`/events?w=${width}&all=${document.body.classList.contains('all') ? 1 : 0}`)
-  es.onopen = () => { state.textContent = 'live'; state.className = 'state' }
-  es.onerror = () => { state.textContent = 'offline, retrying'; state.className = 'state off' }
+  downSince = Date.now()
+  es = new EventSource(`/events?w=${width}&all=${document.body.classList.contains('all') ? 1 : 0}&build=${encodeURIComponent(chosen)}`)
+  es.onopen = () => { heardAt = Date.now(); downSince = 0; light() }
+  es.onerror = () => { if (es.readyState !== 1 && !downSince) downSince = Date.now(); light() }
+  es.addEventListener('status', e => { const d = JSON.parse(e.data); heardAt = Date.now(); scanOkAt = d.scanOkAt ? Date.now() - (d.at - d.scanOkAt) : 0; downSince = 0; light() })
   es.onmessage = e => {
     const d = JSON.parse(e.data)
+    heardAt = Date.now()
+    downSince = 0
     outside = d.outside
+    current = d.current
     document.title = d.title
+    fillPicker(d.builds, d.auto)
     labels()
     const t = document.createElement('main')
     t.id = 'board'

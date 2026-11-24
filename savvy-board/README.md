@@ -4,6 +4,9 @@ The savvy-progress build and agents view as a small always-on window on the Mac 
 
 - **What it shows**: the newest unfinished build (header with Now/Next, the four tiles, the saber bar, a card per job with its PR link), then the build's agents and side sessions with cost, tokens and time ticking live. Other chats sit behind **◎ All** and never count in the totals.
 - **Where the data comes from**: `~/.claude/savvy-progress/builds/*.json`, `~/.claude/savvy-progress/agents/*.json` (a "running" row whose file stops its heartbeat for 60s shows finished), and `savvy-progress/hooks/sessions.py --live` every 12s.
+- **Which build**: the **Watching** menu lists every build by the name its orchestrator gave it in the `jobs` tool, with jobs shipped and the day it last moved; unfinished first, finished ones marked ✓. **Auto** (the default) follows the newest unfinished build, so a new build shows up by itself; pick one to pin this window to it.
+- **Status light** (top right): green **Live**; yellow **Reconnecting**, **Starting** or **Sessions stale** (sessions.py hasn't answered for 45s; jobs and agents still update); red **Offline** or **No signal**. Hover it for the detail.
+- **From the chat band**: savvy-progress's 🔍 and ↻ open this window (↻ also makes it re-read everything) once the board's server has run, since it notes where it lives in `~/.claude/savvy-progress/board.json`. Without that note they open the old pane.
 - **The look** is the mod's own drawings: `jobs.ts` and `glass.ts` are imported as they are; the pane's crabs, agent cards and totals header are ported in `pane.ts` (keep it in step with `register.tsx`). Hover glow, glimmer and the cards' glass are CSS in `page.html`.
 
 ## Run it
