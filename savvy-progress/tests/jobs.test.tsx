@@ -166,7 +166,9 @@ for (const [what, project] of [['the same project', '/projects/garden'], ['anoth
     on('session.start', (_, e) => e as never)
     on('tool.register', (_, e) => ({ value: { tool: `mcp__savvy-progress__${(e as { name: string }).name}` } }))
     on('command.register', () => ({ value: { command: 'agents-info' } }))
-    const b = { ...mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), project) }
+    // This chat reported the build: under its current id, or (another folder) the id it had before the restart.
+    if (project !== '/projects/garden') files.priors.push('old-lead')
+    const b = { ...mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), project), orchestrators: [project === '/projects/garden' ? 'cli-test' : 'old-lead'] }
     files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(b))
     await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -179,7 +181,7 @@ test('a start hook that fails before the restore still leaves the band showing t
   const files = harness(on)
   // No registration stubs: the start hook's registrations throw here, as they could in the app.
   on('session.start', (_, e) => e as never)
-  files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/elsewhere')))
+  files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify({ ...mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/elsewhere'), orchestrators: ['cli-test'] }))
   await $.session.start({ source: 'resume', cwd: '/projects/garden' } as never).catch(() => undefined)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await new Promise(r => setTimeout(r, 30))
@@ -244,7 +246,7 @@ test('a background shell task gets a row while it runs, and finishes once its pr
 test('with session.start skipped (a resume), the first tool call brings the build back', async ($, on) => {
   const files = harness(on)
   on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false } }))
-  files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify(mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/garden')))
+  files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify({ ...mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/garden'), orchestrators: ['cli-test'] }))
   await $.tool.call({ tool: 'Bash', command: 'git status', description: 'x' })
   await new Promise(r => setTimeout(r, 30))
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -286,4 +288,36 @@ test('the band buttons open the savvy board, never a pane', async ($, on) => {
   expect(files.runs.some(a => a.at(-1) === '--refresh')).toBe(true)
   expect(files.opened).toEqual([])
   await band.unmount()
+})
+
+// Marc (Nov 24): the band kept showing, and came back after ✕, in chats unrelated to the build.
+test('a chat that never reported the build shows no band, even in the same folder', async ($, on) => {
+  const files = harness(on)
+  on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false } }))
+  files.set('/home/test/.claude/savvy-progress/builds/garden-planner.json', JSON.stringify({ ...mergeBuild(null, SEED, Date.UTC(2026, 10, 22, 17), '/projects/garden'), orchestrators: ['someone-else'] }))
+  await $.tool.call({ tool: 'Bash', command: 'git status', description: 'x' })
+  await new Promise(r => setTimeout(r, 30))
+  // No band: the mod passes the draw on, and nothing in the test sits beneath it.
+  await expect($.ui.mount({ ...BAND, surface: 'terminal' })).rejects.toThrow(/no implementation for ui.render/)
+})
+
+test('the band\'s ✕ sticks past the next lookup, and the jobs tool brings the band back', async ($, on) => {
+  const h = harness(on)
+  on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false } }))
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', ...SEED })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await ui.press({ key: 'savvy-dismiss' })
+  await new Promise(r => setTimeout(r, 30))
+  await ui.unmount()
+  // Past the 15s lookup throttle, a tool call would restore the build if the dismissal were forgotten.
+  for (let i = 0; i < 2; i++) {
+    h.time.at += 20_000
+    await $.tool.call({ tool: 'Bash', command: 'true', description: 'x' })
+    await new Promise(r => setTimeout(r, 30))
+  }
+  await expect($.ui.mount({ ...BAND, surface: 'terminal' }), 'dismissed').rejects.toThrow(/no implementation for ui.render/)
+  await $.tool.call({ tool: 'mcp__savvy-progress__jobs', build: 'Garden planner' })
+  const back = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await back.find({ type: 'Button', key: 'savvy-dismiss' }), 'back after jobs').toBeTruthy()
+  await back.unmount()
 })

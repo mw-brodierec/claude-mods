@@ -191,31 +191,47 @@ async function loadBuild($: EngineInterface, id: string): Promise<Build | null> 
 const saveBuild = async ($: EngineInterface, b: Build): Promise<void> =>
   $.fs.write(`${await buildsDir($)}/${b.id}.json`, JSON.stringify(b, null, 2) + '\n')
 
-// The build a session should show when it has none: the newest unfinished one started from this
-// project; else one started in a folder above or below it; else (Marc: any session's build shows
-// after a restart) the newest unfinished build touched in the last three days, wherever it began.
-const RECENT_MS = 3 * 24 * 3600_000
-async function latestBuildFor($: EngineInterface, project: string): Promise<Build | null> {
+// The build a session should show when it has none: the newest unfinished build this chat
+// reported (it is in `orchestrators`, under its current CLI id or one it had before a restart).
+// Marc (Nov 24): never a build because it is recent or shares a folder; that put the band, and
+// the band's ✕ that never stuck, into every unrelated chat.
+const isLead = (b: Build, ids: readonly string[]): boolean => (b.orchestrators ?? []).some(o => ids.includes(o))
+async function latestBuildFor($: EngineInterface, ids: readonly string[]): Promise<Build | null> {
   try {
     const dir = await buildsDir($)
     const names = (await $.fs.list(dir)).filter(x => x.kind === 'file' && x.name.endsWith('.json'))
     const all = (await Promise.all(names.map(x => loadBuild($, x.name.replace(/\.json$/, '')))))
-      .filter((b): b is Build => b !== null && !b.isFinished && b.jobs.length > 0)
+      .filter((b): b is Build => b !== null && !b.isFinished && b.jobs.length > 0 && isLead(b, ids))
       .sort((a, z) => z.updatedAt - a.updatedAt)
-    const within = (a: string, b: string) => a === b || a.startsWith(`${b.replace(/\/$/, '')}/`)
-    const at = await $.clock.now()
-    return (
-      all.find(b => b.project === project) ??
-      all.find(b => within(project, b.project) || within(b.project, project)) ??
-      all.find(b => at - b.updatedAt < RECENT_MS) ??
-      null
-    )
+    return all[0] ?? null
   } catch {
     return null
   }
 }
 
-// Restores a build into a session that shows none, and otherwise picks up other sessions' changes
+// This chat's CLI ids, current first, then the ones it had before a restart (sessions.py --prior).
+let mine: string[] | null = null
+async function myIds($: EngineInterface): Promise<string[]> {
+  const id = await $.session.id()
+  if (mine?.[0] !== id) mine = [id, ...(await priorIds($, id))]
+  return mine
+}
+
+// Marc: the band's ✕ sticks. The store keeps session id → dismissed build id, so the restore below
+// skips it after a reload or restart too; the chat calling the jobs tool again brings it back.
+const DISMISSED_KEY = 'dismissed-builds'
+const readDismissed = async ($: EngineInterface): Promise<Record<string, string>> => {
+  const v = await $.store.get(DISMISSED_KEY).catch(() => undefined)
+  return v && typeof v === 'object' ? (v as Record<string, string>) : {}
+}
+async function setDismissed($: EngineInterface, buildId: string | null): Promise<void> {
+  const ids = await myIds($)
+  const map = Object.fromEntries(Object.entries(await readDismissed($)).filter(([k]) => !ids.includes(k)))
+  if (buildId) map[ids[0]] = buildId
+  await $.store.set(DISMISSED_KEY, map)
+}
+
+// Restores this chat's build when it shows none, and otherwise picks up other sessions' changes
 // to it, at most every 15s. Called at start, on every draw of the band and on the timer:
 // /resume, /clear and a restart reset $.state and skip session.start (and with it the timer), so
 // the draws are what bring a resumed session's build back.
@@ -224,9 +240,16 @@ async function ensureBuild($: EngineInterface): Promise<void> {
   const at = await $.clock.now()
   if (at - lastLookup < 15_000 && lastLookup !== 0) return
   lastLookup = at
-  if (await read($, build)) return refreshBuild($)
-  const found = await latestBuildFor($, await $.session.root())
-  if (found && !(await read($, build))) await update($, build, () => found)
+  const ids = await myIds($)
+  const held = await read($, build)
+  // A build adopted by an older copy of this mod, in a chat that never reported it: let it go.
+  if (held && !isLead(held, ids)) return void (await update($, build, () => null))
+  if (held) return refreshBuild($)
+  const found = await latestBuildFor($, ids)
+  if (!found) return
+  const dismissed = await readDismissed($)
+  if (ids.some(i => dismissed[i] === found.id)) return
+  if (!(await read($, build))) await update($, build, () => found)
 }
 
 // Marc: the agent rows survive a restart. The list lives in $.state, which a restart, /resume or
@@ -512,14 +535,12 @@ const allRuns = async ($: EngineInterface): Promise<AgentRun[]> => (await everyR
 // ponytail: re-reads every file on each 15s tick; fine for dozens, index them if hundreds pile up.
 const FLEET_MS = 12 * 3600_000
 const FLEET_STALE_MS = 60_000
-let mine: string[] | null = null
 async function refreshFleet($: EngineInterface): Promise<void> {
   try {
-    const id = await $.session.id()
-    mine ??= [id, ...(await priorIds($, id))]
+    const mine = await myIds($)
     const dir = `${(await $.env.get('HOME')) || '~'}/.claude/savvy-progress/agents`
     const at = await $.clock.now()
-    const files = (await $.fs.list(dir)).filter(x => x.kind === 'file' && x.name.endsWith('.json') && !mine?.includes(x.name.replace(/\.json$/, '')))
+    const files = (await $.fs.list(dir)).filter(x => x.kind === 'file' && x.name.endsWith('.json') && !mine.includes(x.name.replace(/\.json$/, '')))
     const rows: AgentRun[] = []
     for (const f of files) {
       let saved: { savedAt?: number; runs?: AgentRun[] }
@@ -701,8 +722,10 @@ export const register: Register = (on, options) => {
         sessions: [...new Set(j.sessions.flatMap(x => [x, ...side.filter(ss => ss.name && ss.name === x).map(ss => ss.id)]))],
       })),
     }
-    const hasChange = Boolean(input.jobs?.length || input.remove?.length || input.next || input.summary !== undefined || input.memo !== undefined || input.finished !== undefined || !prev)
+    const isNewLead = !(prev?.orchestrators ?? []).includes(await $.session.id())
+    const hasChange = isNewLead || Boolean(input.jobs?.length || input.remove?.length || input.next || input.summary !== undefined || input.memo !== undefined || input.finished !== undefined || !prev)
     if (hasChange) await saveBuild($, linked)
+    await setDismissed($, null).catch(() => undefined)
     await update($, build, () => (hasChange ? linked : prev ?? linked))
     void refreshSessions($)
     return { result: buildReport(hasChange ? linked : prev ?? linked) }
@@ -937,8 +960,10 @@ export const register: Register = (on, options) => {
         plain
         role="dismiss"
         onPress={async () => {
+          const cur = await read($, build)
           await update($, flow, () => null)
           await update($, build, () => null)
+          if (cur) await setDismissed($, cur.id)
         }}
       />
     )
