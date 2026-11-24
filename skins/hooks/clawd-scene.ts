@@ -491,8 +491,9 @@ export function shuttleSvg(): string {
 }
 
 export function burglarSvg(): string {
-  // Night in an alley, the whole drawing (so it reads the same on any theme, and the band only
-  // picks it on a dark one): a burglar in black sweeps his flashlight along the alley. The beam
+  // Night in an alley (the band only picks it on a dark theme): a burglar in black sweeps his
+  // flashlight along the alley. No backdrop of its own: the wall, side walls, cobbles and beam fade
+  // out toward every edge, so the scene dissolves into the band like the others (Marc). The beam
   // turns with the torch in his claw; when it lands at the far end it shows a caped figure with
   // pointed ears, and a dark thought bubble with a red "!" pops over his head. 4.2s loop.
   const style = css([
@@ -511,23 +512,23 @@ export function burglarSvg(): string {
     pf('#2A2B30', px(1, -0.4, 9, 0.5)) +
     `<rect x="${0.4 * U}" y="${-0.1 * U}" width="${10.2 * U}" height="${2.8 * U}" rx="1" fill="#17181B" ${EDGE}/>` +
     `<g class="eyes" fill="#FFFFFF">${px(3, 1, 1, 1)}${px(7, 1, 1, 1)}</g>`
-  // The alley, edge to edge: brick back wall, a wall lamp flickering over him, the side walls
-  // closing in toward the far end, wet cobbles underfoot, a bin and a fire escape.
+  // The alley: brick back wall, a wall lamp flickering over him, the side walls closing in toward
+  // the far end, wet cobbles underfoot, a bin and a fire escape.
   const alley =
-    `<rect x="0" y="0" width="96" height="30" fill="#1C1E24"/>` +
     `<g stroke="#262931" stroke-width=".5">${[3, 7, 11, 15, 19, 23].map(y => `<path d="M0 ${y}H96"/>`).join('')}${[0, 1, 2, 3, 4, 5].map(r => Array.from({ length: 12 }, (_, c) => `<path d="M${2 + c * 8 + (r % 2) * 4} ${3 + r * 4}v4"/>`).join('')).join('')}</g>` +
     `<radialGradient id="lampGlow" cx="50%" cy="0%" r="100%"><stop offset="0" stop-color="#FFD98A" stop-opacity=".22"/><stop offset="1" stop-color="#FFD98A" stop-opacity="0"/></radialGradient>` +
-    `<path class="lamp" d="M10 1.6L-2 27H26Z" fill="url(#lampGlow)"/><rect x="8" y="0" width="4" height="1.2" fill="#3A3D44"/><rect x="8.6" y="1.2" width="2.8" height=".8" fill="#FFE7A8" class="lamp"/>` +
+    `<path class="lamp" d="M10 2.8L-2 27H26Z" fill="url(#lampGlow)"/>` +
     `<path d="M96 0L84 5V24.5L96 30Z" fill="#121419"/><path d="M84 5L72 9V23L84 24.5Z" fill="#0F1115" opacity=".7"/>` +
-    `<rect x="0" y="26" width="96" height="4" fill="#121418"/>` +
+    `<rect x="0" y="26" width="96" height="4" fill="#15171C"/>` +
     `<g fill="#1A1D23">${[2, 9, 16, 44, 51, 58, 65].map(x => `<rect x="${x}" y="26.8" width="5" height="1" rx=".4"/>`).join('')}</g>` +
     `<ellipse cx="60" cy="28.4" rx="6" ry=".7" fill="#2A3140" opacity=".8"/>` +
     `<rect x="48" y="20.5" width="8" height="5.5" fill="#2E4A3A"/><rect x="47.5" y="19.9" width="9" height="1" fill="#24392D"/>` +
     `<g stroke="#2E3138" stroke-width=".5" fill="none"><path d="M62 4H70V11H62ZM62 7.5H70"/><path d="M64 11L68 4"/><path d="M62 11V18H70V11"/></g>`
   // The caped figure at the far end: cowl with pointed ears, broad shoulders, cape to the ground.
-  // Near the wall's own colour, so the beam behind him is what shows his shape.
+  // Nearly black, so the beam behind him is what shows his shape; once he is found, a pale rim of
+  // torchlight traces his ears and cape too, as there is no wall behind him now.
   const figure =
-    `<path d="M78.6 9.6L79.3 7.4 79.8 9.2H81.2L81.7 7.4 82.4 9.6Q83.2 11.2 82.2 12.6L85.6 14 88 26H73L75.4 14 78.8 12.6Q77.8 11.2 78.6 9.6Z" fill="#17191E"/>` +
+    `<path d="M78.6 9.6L79.3 7.4 79.8 9.2H81.2L81.7 7.4 82.4 9.6Q83.2 11.2 82.2 12.6L85.6 14 88 26H73L75.4 14 78.8 12.6Q77.8 11.2 78.6 9.6Z" fill="#17191E"/><path class="gasp" d="M73 26L75.4 14 78.8 12.6Q77.8 11.2 78.6 9.6L79.3 7.4 79.8 9.2H81.2L81.7 7.4 82.4 9.6Q83.2 11.2 82.2 12.6L85.6 14 88 26" fill="none" stroke="#FFE68A" stroke-opacity=".45" stroke-width=".35" stroke-linejoin="round"/>` +
     `<path class="gasp" d="M79.6 10.6h.8M80.6 10.6h.8" stroke="#E8EEF5" stroke-width=".35"/>`
   // Torch and beam turn together about his claw: the beam can never leave the torch.
   const beam =
@@ -540,17 +541,50 @@ export function burglarSvg(): string {
     `<g class="gasp"><circle cx="30.5" cy="10.6" r=".8" fill="#2A2D35" stroke="#4A4E58" stroke-width=".35"/><circle cx="33" cy="8.4" r="1.2" fill="#2A2D35" stroke="#4A4E58" stroke-width=".35"/>` +
     `<rect x="34.2" y=".6" width="8.4" height="7" rx="3.5" fill="#2A2D35" stroke="#4A4E58" stroke-width=".4"/>` +
     `<rect x="37.75" y="1.7" width="1.3" height="3.2" rx=".5" fill="#E5484D"/><rect x="37.75" y="5.4" width="1.3" height="1.2" rx=".5" fill="#E5484D"/></g>`
-  return svg(style, `${alley}${beam}${figure}${standing(look)}${gasp}`)
+  // The fixture stays crisp; everything behind him fades to nothing over the outer few pixels.
+  const lamp = `<rect x="8" y="1.4" width="4" height="1.2" fill="#3A3D44"/><rect x="8.6" y="2.6" width="2.8" height=".8" fill="#FFE7A8" class="lamp"/>`
+  const fade = (id: string, x2: number, y2: number, a: number, b: number) =>
+    `<linearGradient id="${id}g" x2="${x2}" y2="${y2}"><stop offset="0" stop-color="#FFF" stop-opacity="0"/><stop offset="${a}" stop-color="#FFF"/><stop offset="${b}" stop-color="#FFF"/><stop offset="1" stop-color="#FFF" stop-opacity="0"/></linearGradient>` +
+    `<mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="url(#${id}g)"/></mask>`
+  const masks = fade('fadeX', 1, 0, 0.12, 0.9) + fade('fadeY', 0, 1, 0.2, 0.86)
+  return svg(style, `${masks}<g mask="url(#fadeX)"><g mask="url(#fadeY)">${alley}${beam}</g></g>${lamp}${figure}${standing(look)}${gasp}`)
 }
 
 export function engineerSvg(): string {
-  // Hard hat and hi-vis vest, turning a valve wheel on the steam line; the gauge needle jumps.
+  // Hard hat and hi-vis vest at the valve on the steam line, one 6.8s story (Marc): steam pours up
+  // out of the pipe; he turns the wheel shut, the last puffs rise away and the needle falls; a pause;
+  // he turns it back open, the steam returns and the needle climbs. The loop starts in the pause.
+  const T = 6.8
+  const at = (t: number) => `${+(t / T * 100).toFixed(2)}%`
+  // A puff leaves the mouth every .3s while the valve is open; each rises 5.5px in 1.4s (the band
+  // is only 30 tall), drifting a little, growing and fading out before the top edge. Five circles
+  // take turns, so none is reused mid-rise.
+  const EMIT = Array.from({ length: 12 }, (_, j) => 1.2 + j * 0.3)
+  const DRIFT = [1.2, -1.4, 2, -0.8, 1.6, -1.8, 1, 2, -1.1, 1.4, -1.6, 1]
+  const rest = 'transform:translate(0,0) scale(.5);opacity:0'
+  const puffKeys = [0, 1, 2, 3, 4].map(k => {
+    const lives = EMIT.flatMap((e, j) => {
+      if (j % 5 !== k) return []
+      const d = DRIFT[j] ?? 0
+      const f = j === 0 || j === EMIT.length - 1 ? 0.7 : 1
+      const step = (dt: number, rise: number, scale: number, opacity: number) =>
+        `${at(e + dt)}{transform:translate(${+(d * rise).toFixed(2)}px,${+(-5.5 * rise).toFixed(2)}px) scale(${+(scale * f).toFixed(2)});opacity:${opacity}}`
+      return [`${at(e)}{${rest}}`, step(0.2, 0.3, 0.9, 0.95), step(0.75, 0.7, 1.25, 0.6), step(1.4, 1, 1.5, 0)]
+    })
+    return `@keyframes p${k}{0%,100%{${rest}}${lives.join('')}}.p${k}{animation-name:p${k}}`
+  })
   const style = css([
     blinkEyes,
-    '.wheel{transform-box:fill-box;transform-origin:50% 50%;animation:turn 2.4s ease-in-out infinite}@keyframes turn{0%,100%{transform:rotate(0)}50%{transform:rotate(120deg)}}',
-    '.puff{animation:puff 1.8s ease-out infinite}.puff.b{animation-delay:-.6s}.puff.c{animation-delay:-1.2s}',
-    '@keyframes puff{0%{transform:translate(0,0) scale(.4);opacity:0}25%{opacity:.85}100%{transform:translate(3px,-9px) scale(1.4);opacity:0}}',
-    '.needle{transform-box:fill-box;transform-origin:0% 50%;animation:needle 2.4s ease-in-out infinite}@keyframes needle{0%,100%{transform:rotate(-30deg)}50%{transform:rotate(40deg)}}',
+    // Shut clockwise, one full turn, 3.9-4.8s; open again the other way, .5-1.4s.
+    `.wheel{transform-box:fill-box;transform-origin:50% 50%;animation:turn ${T}s ease-in-out infinite}`,
+    `@keyframes turn{0%,${at(0.5)}{transform:rotate(360deg)}${at(1.4)},${at(3.9)}{transform:rotate(0)}${at(4.8)},100%{transform:rotate(360deg)}}`,
+    `.clawd{animation:heave ${T}s ease-in-out infinite}`,
+    `@keyframes heave{0%,${at(0.5)},${at(1.4)},${at(3.9)},${at(4.8)},100%{transform:translateY(0)}${at(0.95)},${at(4.35)}{transform:translateY(.7px)}}`,
+    `.puff{transform-box:fill-box;transform-origin:50% 50%;animation:${T}s linear infinite}`,
+    ...puffKeys,
+    // Needle low (pointing down-left) while shut, sweeping up to the red zone once the steam flows.
+    `.needle{transform-box:view-box;transform-origin:74px 15px;animation:needle ${T}s ease-in-out infinite}`,
+    `@keyframes needle{0%,${at(1)}{transform:rotate(140deg)}${at(1.9)}{transform:rotate(330deg)}${at(2.6)}{transform:rotate(322deg)}${at(3.3)}{transform:rotate(332deg)}${at(4.3)}{transform:rotate(326deg)}${at(5.2)},100%{transform:rotate(140deg)}}`,
   ])
   const look =
     `<path d="M${0.6 * U} 0Q${0.6 * U} ${-2.4 * U} ${5.5 * U} ${-2.4 * U}Q${10.4 * U} ${-2.4 * U} ${10.4 * U} 0Z" fill="#F5C542"/>` +
@@ -559,10 +593,16 @@ export function engineerSvg(): string {
   const pipes =
     `<rect x="36" y="22" width="60" height="3.2" fill="#8E959C"/><rect x="62" y="9" width="3.2" height="13" fill="#8E959C"/><rect x="61" y="8" width="5.2" height="1.6" fill="#6B7178"/>` +
     `<rect x="44" y="21.4" width="1.6" height="4.4" fill="#6B7178"/><rect x="80" y="21.4" width="1.6" height="4.4" fill="#6B7178"/>`
-  const wheel = `<g class="wheel"><circle cx="38" cy="18.5" r="4" fill="none" stroke="${RED}" stroke-width="1.1"/><path d="M34 18.5H42M38 14.5V22.5" stroke="${RED}" stroke-width=".8"/></g><rect x="37.4" y="22" width="1.2" height="1" fill="#6B7178"/>`
-  const gauge = `<circle cx="74" cy="15" r="3.6" fill="#FAFAF8" stroke="#6B7178" stroke-width=".8"/><rect class="needle" x="74" y="14.7" width="2.8" height=".6" fill="${RED}"/><rect x="73.4" y="18.6" width="1.2" height="3.4" fill="#6B7178"/>`
-  const puffs = ['', 'b', 'c'].map(k => `<circle class="puff ${k}" cx="63.6" cy="6.5" r="1.8" fill="#FFFFFF"/>`).join('')
-  return svg(style, `${floor()}${pipes}${gauge}${puffs}${standing(look)}${wheel}`)
+  // A grey knob on the rim shows the turn; his claw grips the wheel's left side.
+  const wheel =
+    `<g class="wheel"><circle cx="38" cy="18.5" r="4" fill="none" stroke="${RED}" stroke-width="1.1"/><path d="M34 18.5H42M38 14.5V22.5" stroke="${RED}" stroke-width=".8"/><circle cx="38" cy="14.5" r="1" fill="#6B7178"/></g>` +
+    `<circle cx="38" cy="18.5" r=".9" fill="#6B7178"/><rect x="37.4" y="22" width="1.2" height="1" fill="#6B7178"/><rect x="31.5" y="17.9" width="3.1" height="1.4" fill="${ORANGE}"/>`
+  const gauge =
+    `<circle cx="74" cy="15" r="3.6" fill="#FAFAF8" stroke="#6B7178" stroke-width=".8"/><path d="M75.45 12.49A2.9 2.9 0 0 1 76.8 14.25" stroke="${RED}" stroke-width=".7" fill="none"/>` +
+    `<rect class="needle" x="74" y="14.7" width="2.8" height=".6" fill="#2E2E30"/><circle cx="74" cy="15" r=".6" fill="#2E2E30"/><rect x="73.4" y="18.6" width="1.2" height="3.4" fill="#6B7178"/>`
+  // Grey-edged puffs at the pipe's mouth, so the steam shows on a light theme too.
+  const puffs = [0, 1, 2, 3, 4].map(k => `<circle class="puff p${k}" cx="63.6" cy="7.2" r="1.5" fill="#F2F3F5" stroke="#9EA6AF" stroke-width=".3"/>`).join('')
+  return svg(style, `${floor()}${puffs}${pipes}${gauge}${standing(look)}${wheel}`)
 }
 
 export function chefSvg(): string {
