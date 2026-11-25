@@ -436,15 +436,29 @@ async function refreshUsage($: EngineInterface): Promise<void> {
   const usage = await $.session.usage()
   // The engine may report only percent and window; the count follows from those.
   const tokens = usage.context.tokens || (usage.context.percent != null && usage.context.window ? Math.round((usage.context.percent / 100) * usage.context.window) : 0)
+  let limits: UsageSnap['limits'] = usage.rateLimits.map(limit => {
+    const resetsAt = limit.resetsAt === undefined ? NaN : Date.parse(limit.resetsAt)
+
+    return { label: limitLabel(limit.kind), percent: limit.percentUsed, ...(Number.isNaN(resetsAt) ? {} : { resetsAt }) }
+  })
+  // Marc: some chats get no plan limits from the app (the band showed the context ring alone).
+  // Limits are the account's, not the chat's, so the last ones any chat saw stand in, minus any
+  // whose window has since reset.
+  // Best effort: without a store the band just shows what this chat has.
+  try {
+    if (limits.length > 0) {
+      await $.store.set('last-limits', limits)
+    } else {
+      const now = await $.clock.now()
+      const saved = (await $.store.get('last-limits')) as UsageSnap['limits'] | undefined
+      limits = Array.isArray(saved) ? saved.filter(limit => limit.resetsAt === undefined || limit.resetsAt > now) : []
+    }
+  } catch {}
   const snap: UsageSnap = {
     context: usage.context.percent ?? null,
     ...(tokens ? { tokens } : {}),
     ...(usage.context.window ? { window: usage.context.window } : {}),
-    limits: usage.rateLimits.map(limit => {
-      const resetsAt = limit.resetsAt === undefined ? NaN : Date.parse(limit.resetsAt)
-
-      return { label: limitLabel(limit.kind), percent: limit.percentUsed, ...(Number.isNaN(resetsAt) ? {} : { resetsAt }) }
-    }),
+    limits,
   }
   // A window that resets moves its reset time even where its percent stays the same.
   const drawn = (of: UsageSnap) => JSON.stringify([metersOf(of), of.limits.map(limit => limit.resetsAt ?? null)])
