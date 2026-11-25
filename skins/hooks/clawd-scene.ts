@@ -821,3 +821,50 @@ export function clawdScene(isWorking: boolean, wait: number): { source: string; 
     alt: isWorking ? 'Clawd dribbling and shooting' : alt,
   }
 }
+
+// Marc: the dials outrank the scene. Where the full scene doesn't fit, this small Clawd stands
+// in: dribbling while Claude works, asleep while it waits for you.
+export const MINI_W = 38
+const mini = (style: string, inner: string) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${MINI_W}" height="${H}" viewBox="0 0 ${MINI_W} ${H}">${style}${inner}</svg>`
+const standingAt = (x: number, face: string) =>
+  `<g class="clawd"><g transform="translate(${x} 12.5)"><g fill="${ORANGE}">${body}${[2, 4, 6, 8].map(l => px(l, 5, 1, 2)).join('')}</g>${face}</g></g>`
+
+function miniWorkingSvg(): string {
+  const style = css([
+    '.ball{animation:dribble .8s infinite}',
+    '@keyframes dribble{0%,100%{transform:translate(33px,19px);animation-timing-function:ease-in}50%{transform:translate(33px,27px);animation-timing-function:ease-out}}',
+    '.spin{transform-box:fill-box;transform-origin:50% 50%;animation:roll .8s linear infinite}',
+    '@keyframes roll{to{transform:rotate(-360deg)}}',
+    '.clawd{animation:bob .8s infinite}',
+    '@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(1px)}}',
+  ])
+  return mini(style, `${standingAt(1, eyes)}${ball}`)
+}
+
+function miniSleepingSvg(): string {
+  // Eyes shut as flat lines; z's rise and fade from above his head.
+  const shut = `<g fill="${INK}">${px(2.6, 2, 1.8, 0.6)}${px(6.6, 2, 1.8, 0.6)}</g>`
+  const z = (cls: string, size: number) =>
+    `<text class="${cls}" font-family="sans-serif" font-weight="700" font-size="${size}" fill="#B9B4AC">z</text>`
+  const style = css([
+    '.z1,.z2{opacity:0;animation:rise 2.4s infinite}',
+    '.z2{animation-delay:1.2s}',
+    '@keyframes rise{0%{opacity:0;transform:translate(27px,12px)}20%{opacity:1}100%{opacity:0;transform:translate(34px,1px)}}',
+    '.clawd{animation:breathe 2.4s ease-in-out infinite}',
+    '@keyframes breathe{0%,100%{transform:translateY(0)}50%{transform:translateY(.8px)}}',
+  ])
+  return mini(style, `${standingAt(1, shut)}${z('z1', 7)}${z('z2', 9)}`)
+}
+
+const MINI_WORKING = miniWorkingSvg()
+const MINI_SLEEPING = miniSleepingSvg()
+
+export function miniClawd(isWorking: boolean): { source: string; width: number; height: number; alt: string } {
+  return {
+    source: isWorking ? MINI_WORKING : MINI_SLEEPING,
+    width: MINI_W,
+    height: H,
+    alt: isWorking ? 'Clawd dribbling' : 'Clawd asleep, waiting for you',
+  }
+}

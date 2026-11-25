@@ -26,7 +26,7 @@ import { cardWidth, measure, settled } from './svg-kit'
 import { tableSvg } from './svg-table'
 import { terminalSvg } from './svg-terminal'
 import type { ShellOutput } from './svg-terminal'
-import { clawdScene, W as CLAWD_W } from './clawd-scene'
+import { clawdScene, miniClawd, MINI_W, W as CLAWD_W } from './clawd-scene'
 import { metersKey, usageLine, usageSvg } from './svg-usage'
 import { codeRows } from './code-rows'
 import { languageOf } from './highlight'
@@ -895,8 +895,7 @@ function meterView(look: Look, meters: readonly Meter[], isTight = false) {
 // Which parts show is decided from widths in pixels. The band's `bodyColumns` counts cells of the
 // app's code font (about 8px each), so the room is taken at a slightly smaller cell to stay safe,
 // and every part's own width is measured. The band shows the fullest layout that fits: the long
-// labels go first, then the 5h and 7d dials (Marc: the animation outranks them),
-// then the context label, leaving the ring with its percent inside, and last the animation.
+// scene shrinks to a small Clawd first (Marc, Nov 25: the dials outrank the animation); see bandLayout.
 // Marc: the band spans the full width like the build bar below it, and its parts are spread
 // evenly, so the room at each end matches the gaps between them.
 // Anything still too wide is clipped, never spilled.
@@ -909,7 +908,8 @@ const GAP_CELLS = 2
 export const GLASS_SHEEN = `<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="40" viewBox="0 0 2400 40"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".14"/><stop offset=".6" stop-color="#fff" stop-opacity=".03"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><linearGradient id="r" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".35" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#fff" stop-opacity=".28"/></linearGradient></defs><rect width="2400" height="40" fill="url(#s)"/><rect width="2400" height="1" fill="url(#r)"/></svg>`
 
 // `noCountdown` (Marc): the 5h countdown goes before any dial does.
-type BandLayout = { isTight: boolean; isMinimal: boolean; onlyContext: boolean; clawd: boolean; noCountdown?: boolean }
+// `clawd`: the full scene, the small one (dribbling or asleep), or none.
+type BandLayout = { isTight: boolean; isMinimal: boolean; onlyContext: boolean; clawd: 'full' | 'mini' | false; noCountdown?: boolean }
 
 const withoutCountdowns = (meters: readonly Meter[]): Meter[] => meters.map(({ resets: _resets, ...m }) => m)
 
@@ -920,18 +920,22 @@ export function bandLayout(meters: readonly Meter[], palette: Look['skin']['pale
   const gap = GAP_CELLS * 8
   const contextOnly = meters.filter(m => m.label === 'context')
   const width = (parts: number[]): number => parts.filter(w => w > 0).reduce((sum, w, i) => sum + w + (i ? gap : 0), 0)
-  // Marc: the animation outranks the 5h and 7d dials, so it stays while the context ring does.
+  const scene = (c: BandLayout['clawd']): BandLayout['clawd'] => (hasClawd ? c : false)
+  // Marc (Nov 25): the dials outrank the animation. The full scene shrinks to the small Clawd,
+  // then the labels shorten, then Clawd goes, then the countdown, and only then the 5h and 7d dials.
   const tries: BandLayout[] = [
-    { isTight: false, isMinimal: false, onlyContext: false, clawd: hasClawd },
-    { isTight: true, isMinimal: false, onlyContext: false, clawd: hasClawd },
-    { isTight: true, isMinimal: false, onlyContext: false, clawd: hasClawd, noCountdown: true },
-    { isTight: true, isMinimal: false, onlyContext: true, clawd: hasClawd },
-    { isTight: true, isMinimal: true, onlyContext: true, clawd: hasClawd },
-    { isTight: true, isMinimal: false, onlyContext: true, clawd: false },
+    { isTight: false, isMinimal: false, onlyContext: false, clawd: scene('full') },
+    { isTight: false, isMinimal: false, onlyContext: false, clawd: scene('mini') },
+    { isTight: true, isMinimal: false, onlyContext: false, clawd: scene('mini') },
+    { isTight: true, isMinimal: false, onlyContext: false, clawd: false },
+    { isTight: true, isMinimal: false, onlyContext: false, clawd: false, noCountdown: true },
+    { isTight: true, isMinimal: false, onlyContext: true, clawd: scene('mini') },
+    { isTight: true, isMinimal: true, onlyContext: true, clawd: scene('mini') },
   ]
+  const clawdW = { full: CLAWD_W, mini: MINI_W }
   for (const t of tries) {
     const dials = usageSvg(t.onlyContext ? contextOnly : t.noCountdown ? withoutCountdowns(meters) : meters, palette, t.isTight, t.isMinimal).width
-    if (width([dials, t.clawd ? CLAWD_W : 0]) <= room) return t
+    if (width([dials, t.clawd ? clawdW[t.clawd] : 0]) <= room) return t
   }
   return { isTight: true, isMinimal: true, onlyContext: true, clawd: false }
 }
@@ -956,7 +960,11 @@ export function usageBand(look: Look, meters: readonly Meter[], clawd?: { isWork
         </Box>
         {clawd !== undefined && fit.clawd ? (
           <Box flexShrink={0}>
-            <Svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />
+            {fit.clawd === 'mini' ? (
+              <Svg key={clawd.isWorking ? 'clawd-mini-working' : 'clawd-mini-asleep'} {...miniClawd(clawd.isWorking)} isInteractive />
+            ) : (
+              <Svg key={clawd.isWorking ? 'clawd-working' : `clawd-wait-${clawd.wait}`} {...clawdScene(clawd.isWorking, clawd.wait)} isInteractive />
+            )}
           </Box>
         ) : (
           ''

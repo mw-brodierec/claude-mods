@@ -1990,7 +1990,7 @@ test('/skin calm off puts back the settings it changed, and keeps changes made m
   expect(JSON.stringify(listed)).toContain('calm off')
 })
 
-test('the desktop band keeps whatever fits its width: long labels and extra dials go before the animation', async ($, on) => {
+test('the desktop band keeps whatever fits its width: the animation shrinks, then goes, before any dial', async ($, on) => {
   mock.clock(on, { now: 10_000 })
   on('session.cwd', () => ({ value: '/work' }))
   on('store.get', () => ({ value: undefined }))
@@ -2014,12 +2014,20 @@ test('the desktop band keeps whatever fits its width: long labels and extra dial
   // Your 715px window, about 89 cells: everything still fits, Clawd included.
   const yours = await drawn(89)
   expect(yours.alts.length).toBe(2)
-  // A narrow band: the 5h dial goes before the animation does.
+  // Mid width: the small Clawd stands in for the scene, every dial kept.
+  const mid = await drawn(43)
+  expect(mid.svgs[0]).toContain('session')
+  expect(mid.alts.some(a => a === 'Clawd dribbling' || a.startsWith('Clawd asleep'))).toBe(true)
+  // A narrow band: Clawd goes before the 5h dial does.
   const narrow = await drawn(31)
-  expect(narrow.svgs[0]).not.toContain('5h')
-  expect(narrow.alts.some(a => a.startsWith('Clawd'))).toBe(true)
-  // The narrowest: the context ring alone, its percent inside.
+  expect(narrow.svgs[0]).toContain('5h')
+  expect(narrow.alts.some(a => a.startsWith('Clawd'))).toBe(false)
+  // Very narrow: the context ring, its percent inside, with the small Clawd beside it.
   const tiny = await drawn(12)
-  expect(tiny.svgs.length).toBe(1)
   expect(tiny.svgs[0]).toContain('>85<')
+  expect(tiny.svgs.length).toBe(2)
+  // The narrowest: the ring alone.
+  const tinier = await drawn(6)
+  expect(tinier.svgs.length).toBe(1)
+  expect(tinier.svgs[0]).toContain('>85<')
 })
